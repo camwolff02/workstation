@@ -127,29 +127,18 @@
         enabled: true
         state: started
 
-    # If you previously had an auto-"up" unit, disable/remove it to prevent failures
-    - name: Ensure any old tailscale-up.service is disabled and removed
-      block:
-        - name: Stop/disable tailscale-up if present
-          systemd:
-            name: tailscale-up.service
-            enabled: false
-            state: stopped
-          ignore_errors: true
-        - name: Remove tailscale-up unit file
-          file:
-            path: /etc/systemd/system/tailscale-up.service
-            state: absent
-        - name: Reload systemd units
-          command: systemctl daemon-reload
-          changed_when: true
+    # Run the daemon at boot; do NOT call "tailscale up" here
+    - name: Enable and start tailscaled (no authorization yet)
+      systemd:
+        name: tailscaled
+        enabled: true
+        state: started
 
-    # Optional: remove env file used by prior auto-auth flows
-    - name: Remove /etc/default/tailscale (not used in this flow)
-      file:
-        path: /etc/default/tailscale
-        state: absent
-
+    # --- Clean up any old auto-up unit without failing if it's missing ---------------
+    - name: Check if legacy tailscale-up unit file exists
+      stat:
+        path: /etc/systemd/system/tailscale-up.service
+      register: ts_up_unit
 
     # ---------- WOL (optional) ----------
     - name: Install WOL oneshot unit
