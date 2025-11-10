@@ -264,15 +264,7 @@
           - add
           - "{{ repo_root }}/nix#user-env"
 
-    - name: Ensure nixGLNvidia installed for the user
-      become_user: "{{ user_name }}"
-      shell: |
-        . {{ nix_profile }} || true
-        nix-env -iA nixpkgs.nixGLNvidia
-      args:
-        chdir: "{{ repo_root }}"
-
-    - name: Create ~/.local/bin for wrappers
+   - name: Create ~/.local/bin for wrappers
       file:
         path: "{{ user_home }}/.local/bin"
         state: directory

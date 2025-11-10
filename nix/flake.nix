@@ -23,8 +23,6 @@
           # Python & tools (Isaac uses 3.11; uv manages venv/pip)
           python311
           uv
-          # If you *do* want classic pip:
-          # python311Packages.pip
 
           # media / docs / cli
           ffmpeg
@@ -51,6 +49,9 @@
 
           # AI
           llama-cpp
+
+	  # Nvidia
+	  nixgl.nixGLNvidia
         ];
 
         userEnv = pkgs.buildEnv {
