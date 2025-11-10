@@ -99,6 +99,8 @@
 
     # ---------- Docker ----------
     - import_tasks: playbooks/docker.yml
+    # ---------- Jellyfin ----------
+    - import_tasks: playbooks/jellyfin.yml
 
     # ---------- Tailscale (install only; no auto-auth) ----------
     - name: Add Tailscale repo key

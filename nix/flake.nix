@@ -44,7 +44,6 @@
           obsidian
           signal-desktop
           zoom-us
-          jellyfin-media-player
           ghostty
           orca-slicer
           nextcloud-client

@@ -1,0 +1,10 @@
+# Jellyfin Media Player (Flatpak)
+- name: Install Jellyfin Media Player (Flatpak)
+  become_user: "{{ user_name }}"
+  shell: flatpak install -y flathub com.github.iwalton3.jellyfin-media-player
+  args:
+    warn: false
+  register: jmp_inst
+  changed_when: "'Installing' in jmp_inst.stdout or 'Installed' in jmp_inst.stdout"
+  failed_when: false
+
