@@ -1,10 +1,25 @@
-# Jellyfin Media Player (Flatpak)
-- name: Install Jellyfin Media Player (Flatpak)
+# Ensure Flatpak is installed first (you already do this elsewhere, ok to keep)
+- name: Ensure Flatpak is installed
+  apt:
+    name: flatpak
+    state: present
+    update_cache: true
+
+# Add Flathub for *this user* using the official module
+- name: Add Flathub remote for user
   become_user: "{{ user_name }}"
-  shell: flatpak install -y flathub com.github.iwalton3.jellyfin-media-player
-  args:
-    warn: false
-  register: jmp_inst
-  changed_when: "'Installing' in jmp_inst.stdout or 'Installed' in jmp_inst.stdout"
-  failed_when: false
+  community.general.flatpak_remote:
+    name: flathub
+    state: present
+    flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+    method: user
+
+# Install Jellyfin Media Player via Flatpak (user scope)
+- name: Install Jellyfin Media Player (Flatpak, user)
+  become_user: "{{ user_name }}"
+  community.general.flatpak:
+    name: com.github.iwalton3.jellyfin-media-player
+    remote: flathub
+    method: user
+    state: present
 
