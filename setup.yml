@@ -4,7 +4,12 @@
   connection: local
   gather_facts: true
   become: true
-
+  handlers:
+    - name: Restart nix-daemon
+      systemd:
+          name: nix-daemon
+          state: restarted
+      listen: Restart nix-daemon
   vars:
     # ----- Feature toggles -----
     enable_tailscale: true
@@ -38,7 +43,6 @@
       - obsidian
       - signal-desktop
       - zoom-us
-      - jellyfin-media-player
       - orca-slicer
       - sunshine
 
@@ -217,82 +221,8 @@
         state: started
       when: enable_wol and wol_iface|length > 0
 
-    # ---------- Install Nix (multi-user) ----------
-    - name: Install Nix (daemon) if missing
-      shell: sh <(curl -L https://nixos.org/nix/install) --daemon
-      args:
-        executable: /bin/bash
-        creates: /nix/var/nix
-      register: nix_inst
-      changed_when: "'warning:' not in nix_inst.stdout|default('')"
-
-    - name: Source nix-daemon profile for subsequent commands
-      set_fact:
-        nix_profile: /etc/profile.d/nix-daemon.sh
-
-    - name: Ensure nix-daemon is enabled and running (best-effort)
-      systemd:
-        name: nix-daemon
-        enabled: true
-        state: started
-      failed_when: false
-
-    # ---------- Nix packages & nixGL wrappers ----------
-    # Detect the nix binary that the multi-user installer provides
-    - name: Check nix binary path
-      stat:
-        path: /nix/var/nix/profiles/default/bin/nix
-      register: nixbin
-
-    - name: Fail early if Nix is not installed
-      fail:
-        msg: "Nix not found at /nix/var/nix/profiles/default/bin/nix. Re-run the Nix install task."
-      when: not nixbin.stat.exists
-
-    # Install your pinned env into the user's profile (no profile sourcing needed)
-    - name: Install pinned user env from flake to user's profile
-      become_user: "{{ user_name }}"
-      environment:
-        # Enable flakes/nix-command via env instead of CLI flags to dodge quoting issues
-        NIX_CONFIG: "experimental-features = nix-command flakes"
-        # Make sure the nix binary is on PATH for any subcommands that spawn
-        PATH: "/nix/var/nix/profiles/default/bin:{{ ansible_env.PATH }}"
-      command:
-        argv:
-          - /nix/var/nix/profiles/default/bin/nix
-          - profile
-          - add
-          - "{{ repo_root }}/nix#user-env"
-
-    - name: Create ~/.local/bin for wrappers
-      file:
-        path: "{{ user_home }}/.local/bin"
-        state: directory
-        owner: "{{ user_name }}"
-        mode: "0755"
-
-    - name: Create nixGL wrapper scripts
-      copy:
-        dest: "{{ user_home }}/.local/bin/{{ item }}"
-        owner: "{{ user_name }}"
-        mode: "0755"
-        content: |
-          #!/usr/bin/env bash
-          exec nixGLNvidia $(command -v {{ item }}) "$@"
-      loop: "{{ nixgl_wrap_apps }}"
-
-    - name: Update flake lock (optional maintenance)
-      become_user: "{{ user_name }}"
-      environment:
-        NIX_CONFIG: "experimental-features = nix-command flakes"
-        PATH: "/nix/var/nix/profiles/default/bin:{{ ansible_env.PATH }}"
-      command:
-        argv:
-          - /nix/var/nix/profiles/default/bin/nix
-          - flake
-          - update
-      args:
-        chdir: "{{ repo_root }}/nix"
+    # ---------- Nix ----------
+    - import_tasks: playbooks/nix.yml
 
     # ---------- Stow dotfiles ----------
     - name: Discover top-level dotfile packages

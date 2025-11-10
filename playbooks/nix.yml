@@ -1,0 +1,109 @@
+# ---------- Nix base config (flakes on non-NixOS) ----------
+- name: Ensure /etc/nix exists
+  file:
+    path: /etc/nix
+    state: directory
+    mode: "0755"
+
+- name: Enable flakes and accept flake config system-wide
+  copy:
+    dest: /etc/nix/nix.conf
+    mode: "0644"
+    content: |
+      experimental-features = nix-command flakes
+      accept-flake-config = true
+  notify: Restart nix-daemon
+
+- name: Ensure nix-daemon is enabled and running
+  systemd:
+    name: nix-daemon
+    enabled: true
+    state: started
+  failed_when: false
+
+# ---------- Stage flake outside the Git repo (bypass “tracked files” rule) ----------
+- name: Create flake staging dir
+  file:
+    path: /opt/workstation-flake
+    state: directory
+    mode: "0755"
+
+- name: Sync nix flake contents to staging dir
+  copy:
+    src: "{{ repo_root }}/nix/"
+    dest: /opt/workstation-flake/
+    mode: "0644"
+    owner: "{{ user_name }}"
+    group: "{{ user_name }}"
+  # (Using copy keeps this path out of Git, so nix won't demand that flake files are tracked.) 
+  # Ref: flakes need tracked files; using a non-Git path sidesteps that. 
+
+# ---------- Install your pinned user env from the staged flake ----------
+- name: Install user-env from staged flake into user's profile
+  become_user: "{{ user_name }}"
+  environment:
+    # With nix.conf set, this is redundant, but keeps the task self-contained:
+    NIX_CONFIG: "experimental-features = nix-command flakes\naccept-flake-config = true"
+    PATH: "/nix/var/nix/profiles/default/bin:{{ ansible_env.PATH }}"
+  command:
+    argv:
+      - /nix/var/nix/profiles/default/bin/nix
+      - profile
+      - add
+      - "path:/opt/workstation-flake#user-env"
+
+# ---------- Install nixGL wrapper from nixpkgs (pure; keep nixGL out of flake) ----------
+- name: Query user profile for nixGLNvidia
+  become_user: "{{ user_name }}"
+  environment:
+    NIX_CONFIG: "experimental-features = nix-command flakes"
+    PATH: "/nix/var/nix/profiles/default/bin:{{ ansible_env.PATH }}"
+  command:
+    argv:
+      - /nix/var/nix/profiles/default/bin/nix
+      - profile
+      - list
+  register: nix_profile_list
+
+- name: Ensure nixGLNvidia is installed (nixpkgs#nixgl.nixGLNvidia)
+  become_user: "{{ user_name }}"
+  environment:
+    NIX_CONFIG: "experimental-features = nix-command flakes"
+    PATH: "/nix/var/nix/profiles/default/bin:{{ ansible_env.PATH }}"
+  command:
+    argv:
+      - /nix/var/nix/profiles/default/bin/nix
+      - profile
+      - add
+      - "nixpkgs#nixgl.nixGLNvidia"
+  when: nix_profile_list.stdout is not regex("nixgl\\.nixGLNvidia")
+
+# ---------- Create GPU wrappers for GUI apps ----------
+- name: Ensure ~/.local/bin exists
+  become_user: "{{ user_name }}"
+  file:
+    path: "/home/{{ user_name }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Install nixGL wrappers for selected apps
+  become_user: "{{ user_name }}"
+  copy:
+    dest: "/home/{{ user_name }}/.local/bin/{{ item }}"
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec nixGLNvidia "$(command -v {{ item }})" "$@"
+  loop:
+    - obs-studio
+    - discord
+    - obsidian
+    - signal-desktop
+    - zoom-us
+    - ghostty
+    - sunshine
+    - orca-slicer
+    - nextcloud
+
+
