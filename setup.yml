@@ -140,6 +140,56 @@
         path: /etc/systemd/system/tailscale-up.service
       register: ts_up_unit
 
+    - name: Stop/disable legacy tailscale-up if present
+      systemd:
+        name: tailscale-up.service
+        enabled: false
+        state: stopped
+      when: ts_up_unit.stat.exists
+      failed_when: false
+
+    - name: Remove legacy tailscale-up unit file
+      file:
+        path: /etc/systemd/system/tailscale-up.service
+        state: absent
+
+    - name: Reload systemd units (after possible removal)
+      command: systemctl daemon-reload
+      changed_when: true
+
+    # --- Ensure Tailscale SSH is enabled after you're logged in ----------------------
+    # This runs at boot, and if the node is connected it sets ssh=true (idempotent).
+    # If not logged in yet, it exits 0 (no failure).
+    - name: Install tailscale-ensure-ssh service
+      copy:
+        dest: /etc/systemd/system/tailscale-ensure-ssh.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Ensure Tailscale SSH is enabled when connected
+          After=network-online.target tailscaled.service
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/sh -c '\
+            if tailscale status --json 2>/dev/null | grep -q "\"BackendState\":\"Running\""; then \
+              /usr/bin/tailscale set --ssh=true || true; \
+            else \
+              exit 0; \
+            fi'
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable tailscale-ensure-ssh
+      systemd:
+        name: tailscale-ensure-ssh.service
+        enabled: true
+        state: started
+        daemon_reload: true
+
     # ---------- WOL (optional) ----------
     - name: Install WOL oneshot unit
       copy:
