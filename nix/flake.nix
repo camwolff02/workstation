@@ -51,7 +51,7 @@
           llama-cpp
 
 	  # Nvidia
-	  nixgl.nixGLNvidia
+          nixgl.nixGLNvidia
         ];
 
         userEnv = pkgs.buildEnv {
