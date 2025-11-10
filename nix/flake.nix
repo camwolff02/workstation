@@ -9,12 +9,9 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          config = {
-            allowUnfree = true;
-          };
+          config = { allowUnfree = true; };
         };
 
-        # CLI + GUI apps (system daemons still via apt)
         packages = with pkgs; [
           # core build/dev
           cmake
@@ -23,25 +20,25 @@
           openssh
           jq
 
-          # Python & tools (3.11 for Isaac Sim)
+          # Python & tools (Isaac uses 3.11; uv manages venv/pip)
           python311
-          python311Packages.pip
-          python311Packages.venv
           uv
+          # If you *do* want classic pip:
+          # python311Packages.pip
 
-          # Media / docs / CLI
+          # media / docs / cli
           ffmpeg
           yt-dlp
           pandoc
           speedtest-cli
 
-          # NodeJS (pinned)
+          # NodeJS
           nodejs_22
 
           # TeX (full)
           texlive.combined.scheme-full
 
-          # GUI apps (use nixGL wrappers on Ubuntu)
+          # GUI apps (run via nixGL wrappers on Ubuntu)
           discord
           obs-studio
           obsidian
@@ -52,13 +49,11 @@
           orca-slicer
           nextcloud-client
           sunshine
-          tailscale
 
           # AI
           llama-cpp
         ];
 
-        # buildEnv so you can `nix profile add .#user-env`
         userEnv = pkgs.buildEnv {
           name = "user-env";
           paths = packages;
