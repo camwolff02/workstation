@@ -1,0 +1,70 @@
+---
+# Orca Slicer installation tasks (Flatpak) for Ubuntu 24.04+
+# Usage: import_tasks: orca_slicer_setup.yml
+
+# --- remove legacy AppImage bits (if you ran the old tasks before) ---
+- name: Remove legacy Orca Slicer AppImage directory (if present)
+  ansible.builtin.file:
+    path: /opt/orca-slicer
+    state: absent
+
+- name: Remove legacy desktop entry (if present)
+  ansible.builtin.file:
+    path: /usr/share/applications/orca-slicer.desktop
+    state: absent
+
+# --- ensure flatpak is available system-wide ---
+- name: Ensure Flatpak is installed
+  ansible.builtin.apt:
+    name: flatpak
+    state: present
+    update_cache: true
+
+# Optional (recommended generally, not strictly needed for a local bundle):
+# - name: Ensure Flathub remote exists
+#   ansible.builtin.command:
+#     argv: [ flatpak, remote-add, --if-not-exists, flathub, https://flathub.org/repo/flathub.flatpakrepo ]
+#   changed_when: false
+
+# --- download the official OrcaSlicer .flatpak bundle (v2.3.0 as in your old script) ---
+- name: Create staging dir for orcaslicer flatpak
+  ansible.builtin.file:
+    path: /var/cache/orcaslicer
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download Orca Slicer Flatpak bundle
+  ansible.builtin.get_url:
+    url: "https://github.com/SoftFever/OrcaSlicer/releases/download/v2.3.0/OrcaSlicer-Linux-flatpak_V2.3.0_x86_64.flatpak"
+    dest: /var/cache/orcaslicer/OrcaSlicer.flatpak
+    mode: "0644"
+    force: true
+  register: orca_fp_dl
+
+# --- install from the local bundle, idempotently ---
+- name: Check if Orca Slicer Flatpak is already installed
+  ansible.builtin.command:
+    argv: [ flatpak, info, io.github.softfever.OrcaSlicer ]
+  register: orca_fp_info
+  changed_when: false
+  failed_when: false
+
+- name: Install Orca Slicer from local Flatpak bundle (system scope)
+  ansible.builtin.command:
+    argv: [ flatpak, install, "--system", "-y", "/var/cache/orcaslicer/OrcaSlicer.flatpak" ]
+  when: orca_fp_info.rc != 0
+
+# --- make a convenient CLI launcher on PATH (so `orca-slicer` works) ---
+- name: Create CLI wrapper for Orca Slicer
+  ansible.builtin.copy:
+    dest: /usr/local/bin/orca-slicer
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      exec flatpak run io.github.softfever.OrcaSlicer "$@"
+
+# Flatpaks install their own .desktop file, so nothing else is needed for the app menu.
+# (No host gstreamer packages needed either; Flatpak bundles its runtime.)
+

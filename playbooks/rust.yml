@@ -1,0 +1,25 @@
+- name: Install Rust
+  become: true
+  block:
+    - name: Ensure required dependencies are installed
+      package:
+        name:
+          - curl
+          - gcc
+          - make
+        state: present
+
+    - name: Download and install Rust using rustup
+      shell: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      args:
+        creates: ~/.cargo/bin/rustc
+      become: false
+
+    - name: Add Rust to PATH
+      lineinfile:
+        path: ~/.bashrc
+        line: 'export PATH="$HOME/.cargo/bin:$PATH"'
+        create: yes
+      become: false
+

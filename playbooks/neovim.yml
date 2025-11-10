@@ -1,0 +1,192 @@
+# File: nvim_dev_setup.yml
+# Purpose: Importable tasks for setting up Neovim + LazyVim and related tools on Ubuntu.
+
+- name: Install required packages (Lua, git, unzip, curl, build-essential)
+  ansible.builtin.apt:
+    name:
+      - lua5.1
+      - luarocks
+      - git
+      - unzip
+      - curl
+      - build-essential
+    state: present
+    update_cache: true
+
+# ========================
+# Install Neovim
+# ========================
+
+- name: Get latest Neovim release info
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/neovim/neovim/releases/latest
+    return_content: yes
+  register: nvim_release
+
+- name: Set Neovim AppImage download URL
+  ansible.builtin.set_fact:
+    nvim_appimage_url: >-
+      {{ nvim_release.json.assets 
+         | selectattr('name', 'match', 'nvim-linux-x86_64\.appimage')
+         | map(attribute='browser_download_url')
+         | list
+         | first }}
+
+- name: Download latest Neovim AppImage
+  ansible.builtin.get_url:
+    url: "{{ nvim_appimage_url }}"
+    dest: /tmp/nvim.appimage
+    mode: '0755'
+
+- name: Move Neovim AppImage to /usr/local/bin/nvim
+  ansible.builtin.copy:
+    src: /tmp/nvim.appimage
+    dest: /usr/local/bin/nvim
+    remote_src: yes
+    mode: '0755'
+
+- name: Verify Neovim installation
+  ansible.builtin.command:
+    cmd: nvim --version
+  register: nvim_version
+  changed_when: false
+
+- name: Show installed Neovim version
+  ansible.builtin.debug:
+    var: nvim_version.stdout_lines
+
+- name: Ensure /usr/bin/nvim points to /usr/local/bin/nvim
+  ansible.builtin.file:
+    src: /usr/local/bin/nvim
+    dest: /usr/bin/nvim
+    state: link
+    force: true
+
+- name: Ensure /usr/bin/vim points to Neovim binary  
+  ansible.builtin.file:
+    src: /usr/local/bin/nvim
+    dest: /usr/bin/vim
+    state: link
+    force: true
+
+
+# ========================
+# Handle LazyVim config
+# ========================
+
+# - name: Check if ~/.config/nvim exists
+#   ansible.builtin.stat:
+#     path: "{{ lookup('env', 'HOME') }}/.config/nvim"
+#   register: nvim_dir
+#
+# - name: Check if ~/.config/nvim is a Git repo
+#   ansible.builtin.stat:
+#     path: "{{ lookup('env', 'HOME') }}/.config/nvim/.git"
+#   register: nvim_git
+#
+# - name: Pull latest LazyVim config if already a Git repo
+#   ansible.builtin.git:
+#     repo: 'https://github.com/camwolff02/lazyvim_starter.git'
+#     dest: "{{ lookup('env', 'HOME') }}/.config/nvim"
+#     version: main
+#     update: yes
+#   when:
+#     - nvim_dir.stat.exists
+#     - nvim_git.stat.exists
+#
+# - name: Backup existing ~/.config/nvim if not a Git repo
+#   ansible.builtin.command:
+#     cmd: mv "{{ lookup('env', 'HOME') }}/.config/nvim" "{{ lookup('env', 'HOME') }}/.config/nvim.bak.{{ ansible_date_time.iso8601 }}"
+#   when:
+#     - nvim_dir.stat.exists
+#     - not nvim_git.stat.exists
+#
+# - name: Clone LazyVim if ~/.config/nvim was missing or backed up
+#   ansible.builtin.git:
+#     repo: 'https://github.com/camwolff02/lazyvim_starter.git'
+#     dest: "{{ lookup('env', 'HOME') }}/.config/nvim"
+#     version: main
+#   when:
+#     - not nvim_dir.stat.exists or (nvim_dir.stat.exists and not nvim_git.stat.exists)
+
+# ========================
+# Font: FiraCode Nerd Font
+# ========================
+
+- name: Ensure fonts directory exists
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'HOME') }}/.local/share/fonts"
+    state: directory
+    mode: '0755'
+
+- name: Download FiraCode Nerd Font zip
+  ansible.builtin.get_url:
+    url: "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/FiraCode.zip"
+    dest: "/tmp/FiraCode.zip"
+    mode: '0644'
+
+- name: Unzip FiraCode Nerd Font into fonts directory
+  ansible.builtin.unarchive:
+    src: "/tmp/FiraCode.zip"
+    dest: "{{ lookup('env', 'HOME') }}/.local/share/fonts/"
+    remote_src: yes
+
+- name: Refresh font cache
+  ansible.builtin.command:
+    cmd: fc-cache -fv
+
+# ========================
+# FZF + ripgrep + fd
+# ========================
+
+- name: Install fzf (cloning install script)
+  ansible.builtin.apt:
+    name: fzf
+    state: present
+    update_cache: true
+
+- name: Install ripgrep
+  ansible.builtin.apt:
+    name: ripgrep
+    state: present
+    update_cache: true
+
+- name: Install fd (fd-find)
+  ansible.builtin.apt:
+    name: fd-find
+    state: present
+    update_cache: true
+
+# ========================
+# Lazygit via .deb
+# ========================
+#
+- name: Get latest lazygit release info
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/jesseduffield/lazygit/releases/latest
+    return_content: yes
+  register: lazygit_release
+
+- name: Set lazygit download URL (tar.gz)
+  ansible.builtin.set_fact:
+    lazygit_version: "{{ lazygit_release.json.tag_name }}"
+    lazygit_tar_url: "https://github.com/jesseduffield/lazygit/releases/download/{{ lazygit_release.json.tag_name }}/lazygit_{{ lazygit_release.json.tag_name | regex_replace('v', '') }}_Linux_x86_64.tar.gz"
+
+- name: Download lazygit tar.gz package
+  ansible.builtin.get_url:
+    url: "{{ lazygit_tar_url }}"
+    dest: /tmp/lazygit.tar.gz
+    mode: '0644'
+
+- name: Extract lazygit binary
+  ansible.builtin.unarchive:
+    src: /tmp/lazygit.tar.gz
+    dest: /tmp/
+    remote_src: yes
+
+- name: Install lazygit executable
+  ansible.builtin.copy:
+    src: "/tmp/lazygit"
+    dest: /usr/local/bin/lazygit
+    mode: '0755'
+

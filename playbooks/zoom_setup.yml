@@ -1,0 +1,16 @@
+
+- name: Download Zoom
+  get_url:
+    url: "https://zoom.us/client/6.3.6.6315/zoom_amd64.deb"
+    dest: /tmp/zoom.deb
+
+- name: Install Zoom
+  become: true
+  apt:
+    deb: /tmp/zoom.deb
+    state: present
+
+- name: Remove Zoom .deb package
+  file:
+    path: /tmp/zoom.deb
+    state: absent

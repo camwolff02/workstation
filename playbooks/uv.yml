@@ -1,0 +1,3 @@
+- name: Download and install UV
+  shell: |
+    curl -LsSf https://astral.sh/uv/install.sh | sh

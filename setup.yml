@@ -1,459 +1,67 @@
 ---
-- name: Workstation bootstrap (Ubuntu 24.04, local)
-  hosts: localhost
-  connection: local
-  gather_facts: true
-  become: true
-  handlers:
-    - name: Restart nix-daemon
-      systemd:
-          name: nix-daemon
+  - name: Workstation Setup
+    hosts: localhost
+    connection: local
+    gather_facts: true
+    become: true
+
+    vars:
+      user: "{{ ansible_env.SUDO_USER | default(ansible_env.LOGNAME | default(ansible_user_id)) }}"
+
+    handlers:
+      - name: Reload systemd and restart tailscaled
+        systemd:
+          daemon-reload: true
+          name: tailscaled
           state: restarted
-      listen: Restart nix-daemon
-  vars:
-    # ----- Feature toggles -----
-    enable_tailscale: true
-    enable_xorg_virtual: true
-    enable_sunshine: true
-    enable_wol: false
+        
+      - name: Reload systemd
+        systemd:
+          daemon-reload: true
 
-    # Optional: provide at run time: --extra-vars 'tailscale_authkey=tskey-...'
-    tailscale_authkey: ""
+    # TODO figure out how to auto clone submodules recursively
+    # pre_tasks:
+    #  - name: Update repository index
+    #    apt:
+    #      update_cache: true
+    #  - name: Update git submodules
+    #    ansible.builtin.git:
+    #      repo: "{{ playbook_dir }}"
+    #      dest: "{{ playbook_dir }}"
+    #      version: main  
+    #      update: yes
+    #      recursive: yes
+    tasks:
+      - name: Get current working directory
+        shell: pwd
+        register: playbook_path_out
+      - set_fact:
+          playbook_path: "{{ playbook_path_out.stdout }}"
 
-    # Repos to sync into ~/src (text file, one URL per line; # comments allowed)
-    repos_list_file: "scripts/repos.txt"
+      # Core Tasks
+      - import_tasks: playbooks/apt.yml
+      - import_tasks: playbooks/flatpak.yml
+      - import_tasks: playbooks/snap.yml
+      - import_tasks: playbooks/docker.yml
+      - import_tasks: playbooks/wake_on_lan.yml
+      - import_tasks: playbooks/gnome.yml
 
-    # Where the playbook lives == repo root
-    repo_root: "{{ playbook_dir }}"
+      # Coding
+      - import_tasks: playbooks/tailscale.yml
+      - import_tasks: playbooks/uv.yml
+      - import_tasks: playbooks/fish.yml
+      - import_tasks: playbooks/lazygit.yml
+      - import_tasks: playbooks/rust.yml
+      - import_tasks: playbooks/dotfiles.yml
 
-    # Your Nix flake "meta-package"
-    nix_flake_attr: "{{ repo_root }}/nix#user-env"
+      # Core Apps
+      - import_tasks: playbooks/ghostty.yml
+      - import_tasks: playbooks/fonts.yml
 
-    # The user who will own the environment
-    user_name: "{{ ansible_user_id }}"
-    user_home: "{{ ansible_env.HOME }}"
+      # Specialized Apps
+      - import_tasks: playbooks/orca_slicer.yml
 
-    # Default network interface (for WOL)
-    wol_iface: "{{ ansible_default_ipv4.interface | default('') }}"
-
-    # GUI apps we wrap with nixGL
-    nixgl_wrap_apps:
-      - ghostty
-      - obs-studio
-      - obsidian
-      - signal-desktop
-      - zoom-us
-      - orca-slicer
-      - sunshine
-
-    # Git identity
-    git_user_name: "cam"
-    git_user_email: "36940948+camwolff02@users.noreply.github.com"
-
-  tasks:
-    - name: Ensure base apt packages
-      apt:
-        update_cache: true
-        state: present
-        pkg:
-          - git
-          - curl
-          - stow
-          - ca-certificates
-          - gnupg
-          - lsb-release
-          - xz-utils
-          - openssh-server
-          - ethtool
-          - speedtest-cli
-          - build-essential
-          - libfuse2
-          - net-tools
-          - libudev-dev
-          - software-properties-common
-          - bluez
-          - wireplumber
-          - pipewire-audio-client-libraries
-          - libspa-0.2-bluetooth
-          - libldacbt-abr2
-          - libldacbt-enc2
-          - flatpak
-          - xdg-desktop-portal
-          - xdg-desktop-portal-gtk
-          - snapd
-
-    # ---------- NVIDIA driver (580) ----------
-    - name: Add graphics-drivers PPA
-      apt_repository:
-        repo: ppa:graphics-drivers/ppa
-        state: present
-
-    - name: Install NVIDIA driver 580 (primary)
-      apt:
-        name: nvidia-driver-580
-        state: present
-      register: nvidia_primary
-      ignore_errors: true
-
-    - name: Fallback to 580-server if needed
-      apt:
-        name: nvidia-driver-580-server
-        state: present
-      when: nvidia_primary is failed
-
-    # ---------- Docker ----------
-    - import_tasks: playbooks/docker.yml
-    # ---------- Jellyfin ----------
-    - import_tasks: playbooks/jellyfin.yml
-
-    # ---------- Tailscale (install only; no auto-auth) ----------
-    - name: Add Tailscale repo key
-      get_url:
-        url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.noarmor.gpg"
-        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
-        mode: "0644"
-
-    - name: Add Tailscale apt repository (signed-by)
-      copy:
-        dest: /etc/apt/sources.list.d/tailscale.list
-        mode: "0644"
-        content: |
-          deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu/ {{ ansible_distribution_release }} main
-
-    - name: Install tailscale
-      apt:
-        update_cache: true
-        name: tailscale
-        state: present
-
-    # Run the daemon at boot; do NOT call "tailscale up" here
-    - name: Enable and start tailscaled (no authorization yet)
-      systemd:
-        name: tailscaled
-        enabled: true
-        state: started
-
-    # Run the daemon at boot; do NOT call "tailscale up" here
-    - name: Enable and start tailscaled (no authorization yet)
-      systemd:
-        name: tailscaled
-        enabled: true
-        state: started
-
-    # --- Clean up any old auto-up unit without failing if it's missing ---------------
-    - name: Check if legacy tailscale-up unit file exists
-      stat:
-        path: /etc/systemd/system/tailscale-up.service
-      register: ts_up_unit
-
-    - name: Stop/disable legacy tailscale-up if present
-      systemd:
-        name: tailscale-up.service
-        enabled: false
-        state: stopped
-      when: ts_up_unit.stat.exists
-      failed_when: false
-
-    - name: Remove legacy tailscale-up unit file
-      file:
-        path: /etc/systemd/system/tailscale-up.service
-        state: absent
-
-    - name: Reload systemd units (after possible removal)
-      command: systemctl daemon-reload
-      changed_when: true
-
-    # --- Ensure Tailscale SSH is enabled after you're logged in ----------------------
-    # This runs at boot, and if the node is connected it sets ssh=true (idempotent).
-    # If not logged in yet, it exits 0 (no failure).
-    - name: Install tailscale-ensure-ssh service
-      copy:
-        dest: /etc/systemd/system/tailscale-ensure-ssh.service
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=Ensure Tailscale SSH is enabled when connected
-          After=network-online.target tailscaled.service
-          Wants=network-online.target
-
-          [Service]
-          Type=oneshot
-          ExecStart=/bin/sh -c '\
-            if tailscale status --json 2>/dev/null | grep -q "\"BackendState\":\"Running\""; then \
-              /usr/bin/tailscale set --ssh=true || true; \
-            else \
-              exit 0; \
-            fi'
-          RemainAfterExit=yes
-
-          [Install]
-          WantedBy=multi-user.target
-
-    - name: Enable tailscale-ensure-ssh
-      systemd:
-        name: tailscale-ensure-ssh.service
-        enabled: true
-        state: started
-        daemon_reload: true
-
-    # ---------- WOL (optional) ----------
-    - name: Install WOL oneshot unit
-      copy:
-        dest: /etc/systemd/system/wol@.service
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=Enable Wake-on-LAN for %i
-          After=network.target
-
-          [Service]
-          Type=oneshot
-          ExecStart=/usr/sbin/ethtool -s %i wol g
-
-          [Install]
-          WantedBy=multi-user.target
-      when: enable_wol
-
-    - name: Enable WOL for default interface
-      systemd:
-        name: "wol@{{ wol_iface }}.service"
-        enabled: true
-        state: started
-      when: enable_wol and wol_iface|length > 0
-
-    # ---------- Nix ----------
-    - import_tasks: playbooks/nix.yml
-
-    # ---------- Stow dotfiles ----------
-    - name: Discover top-level dotfile packages
-      find:
-        paths: "{{ repo_root }}/dotfiles"
-        file_type: directory
-        depth: 1
-      register: dotpkgs
-
-    - name: Stow packages to $HOME
-      become_user: "{{ user_name }}"
-      shell: |
-        set -e
-        cd "{{ repo_root }}/dotfiles"
-        for d in */ ; do
-          stow -v -t "$HOME" "${d%/}" || true
-        done
-
-    # ---------- Fish as default shell ----------
-    - name: Ensure fish path is in /etc/shells
-      lineinfile:
-        path: /etc/shells
-        line: "{{ lookup('ansible.builtin.pipe', 'command -v fish') }}"
-        state: present
-
-    - name: Set fish as default shell for user
-      user:
-        name: "{{ user_name }}"
-        shell: "{{ lookup('ansible.builtin.pipe', 'command -v fish') }}"
-
-    # ---------- Git global config ----------
-    - name: Configure git defaults
-      become_user: "{{ user_name }}"
-      shell: |
-        git config --global init.defaultBranch main
-        git config --global user.name "{{ git_user_name }}"
-        git config --global user.email "{{ git_user_email }}"
-
-    # ---------- ~/src + repo sync ----------
-    - name: Ensure ~/src exists
-      file:
-        path: "{{ user_home }}/src"
-        state: directory
-        owner: "{{ user_name }}"
-        mode: "0755"
-
-    - name: Load repo list (if present)
-      set_fact:
-        repos_raw: "{{ lookup('ansible.builtin.file', repo_root ~ '/' ~ repos_list_file, errors='ignore') | default('') }}"
-
-    - name: Prepare repo list
-      set_fact:
-        repos_list: "{{ repos_raw.splitlines() | reject('match','^\\s*$') | reject('match','^\\s*#') | list }}"
-
-    - name: Clone/update repos into ~/src
-      become_user: "{{ user_name }}"
-      git:
-        repo: "{{ item }}"
-        dest: "{{ user_home }}/src/{{ item | basename | regex_replace('\\.git$','') }}"
-        update: yes
-      loop: "{{ repos_list }}"
-      when: repos_raw | length > 0
-
-    # ---------- Zen browser (Flatpak) ----------
-    - name: Ensure flathub remote exists
-      become_user: "{{ user_name }}"
-      shell: |
-        flatpak remotes | grep -q flathub || flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-      changed_when: false
-      failed_when: false
-
-    - name: Install Zen browser
-      become_user: "{{ user_name }}"
-      shell: flatpak install -y flathub app.zen_browser.zen
-      args:
-        warn: false
-      register: zen_inst
-      changed_when: "'Installed' in zen_inst.stdout or 'Installing' in zen_inst.stdout"
-      failed_when: false
-
-    - name: Set Zen as default browser
-      become_user: "{{ user_name }}"
-      shell: |
-        xdg-settings set default-web-browser app.zen_browser.zen.desktop || true
-        xdg-mime default app.zen_browser.zen.desktop x-scheme-handler/http
-        xdg-mime default app.zen_browser.zen.desktop x-scheme-handler/https
-        xdg-mime default app.zen_browser.zen.desktop text/html
-      failed_when: false
-
-    # ---------- Proton Mail Desktop (Snap) ----------
-    - name: Install Proton Mail snap
-      snap:
-        name: proton-mail
-        state: present
-
-    - name: Locate Proton Mail desktop file
-      shell: "ls /var/lib/snapd/desktop/applications/proton-mail_*.desktop 2>/dev/null | head -n1"
-      register: pm_desk
-      changed_when: false
-      failed_when: false
-
-    - name: Set Proton Mail as default mail/calendar handlers
-      become_user: "{{ user_name }}"
-      shell: |
-        pm="{{ pm_desk.stdout | basename }}"
-        test -n "$pm" || exit 0
-        xdg-mime default "$pm" x-scheme-handler/mailto
-        xdg-mime default "$pm" text/calendar
-        xdg-mime default "$pm" x-scheme-handler/webcal
-        xdg-mime default "$pm" x-scheme-handler/webcals
-      vars:
-        pm_desk: "{{ pm_desk }}"
-      failed_when: false
-
-    # ---------- LDAC defaults via WirePlumber ----------
-    - name: Ensure WirePlumber Bluetooth config dir
-      file:
-        path: /etc/wireplumber/bluetooth.lua.d
-        state: directory
-        mode: "0755"
-
-    - name: Configure LDAC HQ + codecs
-      copy:
-        dest: /etc/wireplumber/bluetooth.lua.d/51-ldac.lua
-        mode: "0644"
-        content: |
-          monitor.bluez.properties = {
-            bluez5.codecs = [ ldac sbc sbc_xq aac ]
-            bluez5.default.profile = "a2dp_sink"
-            bluez5.enable-msbc = true
-            bluez5.enable-sbc-xq = true
-            bluez5.default.rate = 96000
-          }
-          monitor.bluez.rules = [
-            {
-              matches = [ { device.name = "~bluez_card.*" } ]
-              actions = {
-                update-props = {
-                  bluez5.a2dp.ldac.quality = "hq"
-                }
-              }
-            }
-          ]
-
-    - name: Restart user PipeWire/WirePlumber (best-effort)
-      become_user: "{{ user_name }}"
-      shell: |
-        systemctl --user daemon-reload || true
-        systemctl --user restart wireplumber.service pipewire.service pipewire-pulse.service || true
-      failed_when: false
-
-    # ---------- Xorg virtual display + Sunshine ----------
-    - name: Ensure Xorg conf dir
-      file:
-        path: /etc/X11/xorg.conf.d
-        state: directory
-        mode: "0755"
-      when: enable_xorg_virtual
-
-    - name: Install virtual display Xorg config (1920x1080)
-      copy:
-        dest: /etc/X11/xorg.conf.d/99-virtual-display.conf
-        mode: "0644"
-        content: |
-          Section "Monitor"
-              Identifier "Monitor0"
-              Option "Enable" "true"
-          EndSection
-          Section "Device"
-              Identifier "GPU0"
-              Driver "nvidia"
-              Option "MetaModes" "1920x1080"
-              Option "ModeValidation" "NoDFPNativeResolutionCheck,NoVirtualSizeCheck,NoMaxPClkCheck,NoHorizSyncCheck,NoVertRefreshCheck,NoWidthAlignmentCheck"
-          EndSection
-          Section "Screen"
-              Identifier "Screen0"
-              Device "GPU0"
-              Monitor "Monitor0"
-          EndSection
-      when: enable_xorg_virtual
-
-    - name: Install xorg-virtual-display.service
-      copy:
-        dest: /etc/systemd/system/xorg-virtual-display.service
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=Headless Xorg on :0 with NVIDIA virtual 1080p display
-          After=multi-user.target
-
-          [Service]
-          Type=simple
-          Environment=DISPLAY=:0
-          ExecStart=/usr/lib/xorg/Xorg :0 -noreset -config /etc/X11/xorg.conf.d/99-virtual-display.conf
-          Restart=on-failure
-
-          [Install]
-          WantedBy=multi-user.target
-      when: enable_xorg_virtual
-
-    - name: Enable/start xorg-virtual-display
-      systemd:
-        name: xorg-virtual-display.service
-        enabled: true
-        state: started
-      when: enable_xorg_virtual
-
-    - name: Install sunshine.service (runs as user; uses nixGL-wrapped binary)
-      copy:
-        dest: /etc/systemd/system/sunshine.service
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=Sunshine streaming host
-          After=network-online.target xorg-virtual-display.service
-          Wants=network-online.target
-
-          [Service]
-          User={{ user_name }}
-          Environment=DISPLAY=:0
-          ExecStart={{ user_home }}/.local/bin/sunshine
-          Restart=on-failure
-
-          [Install]
-          WantedBy=multi-user.target
-      when: enable_sunshine
-
-    - name: Enable/start sunshine
-      systemd:
-        name: sunshine
-        enabled: true
-        state: started
-      when: enable_sunshine
-
+      # Tempramental/Undesired
+      # - import_tasks: playbooks/llama_setup.yml
+      # - import_tasks: tasks/code_setup.yml  # TODO uncomment when figure out how to check if code is already installed
+      # - import_tasks: tasks/spotify_setup.yml

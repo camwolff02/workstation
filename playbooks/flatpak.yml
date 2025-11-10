@@ -1,0 +1,169 @@
+# === Flatpak base install =====================================================
+- name: Install Flatpak + GNOME plugin
+  become: true
+  apt:
+    name:
+      - flatpak
+      - gnome-software-plugin-flatpak
+    state: present
+    update_cache: true
+
+# === Flathub (user scope) =====================================================
+- name: Add Flathub remote for {{ user }} (user scope)
+  become: true
+  become_user: "{{ user }}"
+  community.general.flatpak_remote:
+    name: flathub
+    state: present
+    flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+    method: user
+
+# === Install apps as the login user (so `flatpak list` shows them) ============
+- name: Install Flatpak apps for {{ user }}
+  become: true
+  become_user: "{{ user }}"
+  community.general.flatpak:
+    name:
+      - com.github.iwalton3.jellyfin-media-player
+      - io.github.zen_browser.zen
+      - org.signal.Signal
+      - com.bitwarden.desktop
+      - com.discordapp.Discord
+      - md.obsidian.Obsidian
+      - com.nextcloud.desktopclient.nextcloud
+      - com.obsproject.Studio
+      - me.proton.Mail
+      - us.zoom.Zoom
+    remote: flathub
+    method: user
+    state: present
+
+# === Make CLIs available in shells (PATH) =====================================
+# Adds exports/bin for system + user to PATH for bash/zsh/sh sessions.
+- name: Ensure Flatpak exports are on PATH (system profile)
+  become: true
+  copy:
+    dest: /etc/profile.d/flatpak-exports.sh
+    mode: "0644"
+    content: |
+      # Flatpak exports (system + user)
+      FLATPAK_EXPORTS_SYSTEM=/var/lib/flatpak/exports
+      FLATPAK_EXPORTS_USER="$HOME/.local/share/flatpak/exports"
+
+      # XDG_DATA_DIRS (helps shells find .desktop/icons when needed)
+      base_dirs="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+      case ":$base_dirs:" in
+        *":$FLATPAK_EXPORTS_SYSTEM/share:"*) ;; 
+        *) export XDG_DATA_DIRS="$FLATPAK_EXPORTS_SYSTEM/share:$base_dirs" ;;
+      esac
+      case ":$XDG_DATA_DIRS:" in
+        *":$FLATPAK_EXPORTS_USER/share:"*) ;;
+        *) export XDG_DATA_DIRS="$FLATPAK_EXPORTS_USER/share:$XDG_DATA_DIRS" ;;
+      esac
+
+      # PATH (wrappers like nvim/discord live here if the app ships one)
+      case ":$PATH:" in
+        *":$FLATPAK_EXPORTS_SYSTEM/bin:"*) ;;
+        *) export PATH="$FLATPAK_EXPORTS_SYSTEM/bin:$PATH" ;;
+      esac
+      case ":$PATH:" in
+        *":$FLATPAK_EXPORTS_USER/bin:"*) ;;
+        *) export PATH="$FLATPAK_EXPORTS_USER/bin:$PATH" ;;
+      esac
+
+# Fish users get the same environment.
+- name: Ensure Flatpak exports are on PATH (fish)
+  become: true
+  copy:
+    dest: /etc/fish/conf.d/flatpak-exports.fish
+    mode: "0644"
+    content: |
+      set -l sys_exports /var/lib/flatpak/exports
+      set -l user_exports $HOME/.local/share/flatpak/exports
+
+      if test -d "$sys_exports/share"
+        if not string match -q "*$sys_exports/share*" "$XDG_DATA_DIRS"
+          set -x XDG_DATA_DIRS "$sys_exports/share":$XDG_DATA_DIRS
+        end
+      end
+      if test -d "$user_exports/share"
+        if not string match -q "*$user_exports/share*" "$XDG_DATA_DIRS"
+          set -x XDG_DATA_DIRS "$user_exports/share":$XDG_DATA_DIRS
+        end
+      end
+
+      if test -d "$sys_exports/bin"
+        if not contains -- "$sys_exports/bin" $PATH
+          set -x PATH "$sys_exports/bin" $PATH
+        end
+      end
+      if test -d "$user_exports/bin"
+        if not contains -- "$user_exports/bin" $PATH
+          set -x PATH "$user_exports/bin" $PATH
+        end
+      end
+
+# === Expose ALL installed Flatpaks to the app grid (no manual list) ==========
+- name: Ensure per-user applications dir exists
+  become: true
+  become_user: "{{ user }}"
+  file:
+    path: "/home/{{ user }}/.local/share/applications"
+    state: directory
+    mode: "0755"
+
+# Collect all .desktop files from user exports
+- name: Find user-exported Flatpak .desktop files
+  become: true
+  become_user: "{{ user }}"
+  find:
+    paths: "/home/{{ user }}/.local/share/flatpak/exports/share/applications"
+    patterns: "*.desktop"
+    file_type: file
+  register: user_flatpak_desktops
+  failed_when: false
+
+# Collect all .desktop files from system exports
+- name: Find system-exported Flatpak .desktop files
+  become: true
+  find:
+    paths: "/var/lib/flatpak/exports/share/applications"
+    patterns: "*.desktop"
+    file_type: file
+  register: system_flatpak_desktops
+  failed_when: false
+
+- name: Merge user + system desktop lists
+  set_fact:
+    all_flatpak_desktops: "{{ (user_flatpak_desktops.files | default([])) + (system_flatpak_desktops.files | default([])) }}"
+
+# Symlink EVERY Flatpak .desktop into ~/.local/share/applications
+# This makes them show in the app grid regardless of XDG_DATA_DIRS in the GUI session.
+- name: Symlink Flatpak .desktop files into user's applications dir
+  become: true
+  become_user: "{{ user }}"
+  loop: "{{ all_flatpak_desktops | map(attribute='path') | list }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  file:
+    src: "{{ item }}"
+    dest: "/home/{{ user }}/.local/share/applications/{{ item | basename }}"
+    state: link
+    force: true
+
+- name: Check for update-desktop-database
+  ansible.builtin.command: which update-desktop-database
+  register: udd_check
+  changed_when: false
+  failed_when: udd_check.rc not in [0]
+
+- name: Update desktop database (user)
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.command:
+    argv:
+      - update-desktop-database
+      - "/home/{{ user }}/.local/share/applications"
+  changed_when: false
+  when: udd_check.rc == 0 and ((all_flatpak_desktops | default([])) | length > 0)
+

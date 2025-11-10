@@ -1,0 +1,2 @@
+- name: Stow dotfiles
+  shell: stow --adopt -vt ~ dotfiles 

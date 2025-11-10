@@ -1,0 +1,16 @@
+
+- name: Download Discord
+  get_url:
+    url: "https://github.com/Automattic/simplenote-electron/releases/download/v2.3.0/Simplenote-linux-2.3.0-amd64.deb"
+    dest: /tmp/simplenote.deb
+
+- name: Install Simplenote
+  become: true
+  apt:
+    deb: /tmp/simplenote.deb
+    state: present
+
+- name: Remove Simplenote .deb package
+  file:
+    path: /tmp/simplenote.deb
+    state: absent

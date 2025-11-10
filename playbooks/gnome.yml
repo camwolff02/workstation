@@ -1,0 +1,326 @@
+# ================= WhiteSur GTK Theme (Ubuntu 24.04) =================
+# Sources / flags referenced:
+# - Theme flags (-l, -c dark, -t orange, -N glassy) and Flatpak fixes/tweaks, per README. :contentReference[oaicite:0]{index=0}
+# - Recommended extensions list (User Themes, Dash-to-Dock, Blur my Shell), per README. :contentReference[oaicite:1]{index=1}
+# - Blur my Shell repo (build/install). :contentReference[oaicite:2]{index=2}
+# - Dash to Dock extension page (for UUID & reference). :contentReference[oaicite:3]{index=3}
+   # -------------------- prerequisites --------------------
+    - name: Install theme & GNOME extension prerequisites
+      apt:
+        update_cache: true
+        state: present
+        name:
+          - git
+          - curl
+          - unzip
+          - make
+          - sassc
+          - libglib2.0-dev-bin
+          - libxml2-utils
+          - imagemagick
+          - optipng
+          - gettext                 # provides msgfmt (needed by blur-my-shell build)
+          - gnome-tweaks
+          - gnome-shell-extensions  # includes User Themes & 'gnome-extensions' CLI
+          - flatpak
+          - chrome-gnome-shell
+          - libglib2.0-bin       # gsettings, glib-compile-schemas
+          - libgtk-3-bin         # gtk-update-icon-cache
+          - gtk2-engines-murrine # many themes still expect this
+          - imagemagick # TODO try removing
+          - dconf-cli 
+
+    # -------------------- theme repo --------------------
+    - name: Clone/refresh WhiteSur-gtk-theme
+      git:
+        repo: https://github.com/vinceliuice/WhiteSur-gtk-theme.git
+        dest: /opt/WhiteSur-gtk-theme
+        version: master
+        depth: 1
+        update: true
+    - name: Ensure WhiteSur scripts are executable
+      file:
+        path: "/opt/WhiteSur-gtk-theme/{{ item }}"
+        mode: "0755"
+      loop:
+        - install.sh
+        - tweaks.sh
+
+    # -------------------- system-wide theme (NO -l / NO -N) --------------------
+    - name: Install WhiteSur theme (system - Dark + orange, non-interactive)
+      environment:
+        LANG: C.UTF-8
+        LC_ALL: C.UTF-8
+      args:
+        chdir: /opt/WhiteSur-gtk-theme
+      shell: |
+        set -e
+        ./install.sh -c dark -t orange
+      register: whitesur_core
+      # If the script exits non-zero but didn't print an error, don't sink the play.
+      failed_when: >
+        whitesur_core.rc != 0
+        and (
+          (whitesur_core.stderr | default('')) | length > 0
+          or ('ERROR' in (whitesur_core.stdout | default('')))
+        )
+      changed_when: >
+        'Installing' in (whitesur_core.stdout | default(''))
+        or 'updated' in (whitesur_core.stdout | default(''))
+
+    # -------------------- per-user libadwaita + Nautilus glassy --------------------
+
+
+
+    # Clean any root-owned temp file in /opt from past runs (ignore if absent)
+    - name: Clean stale temp file from /opt WhiteSur repo (if present)
+      file:
+        path: /opt/WhiteSur-gtk-theme/src/sass/_theme-options-temp.scss
+        state: absent
+      failed_when: false
+
+    # Ensure the user's cache dir exists (run as the real user; no sudo)
+    - name: Ensure user cache dir for WhiteSur exists
+      become: false
+      file:
+        path: "/home/{{ user }}/.cache"
+        state: directory
+        mode: "0755"
+
+    # Clone a user-writable copy of the theme (no sudo)
+    - name: Clone/refresh WhiteSur-gtk-theme (user copy)
+      become: false
+      git:
+        repo: https://github.com/vinceliuice/WhiteSur-gtk-theme.git
+        dest: "/home/{{ user }}/.cache/WhiteSur-gtk-theme"
+        version: master
+        depth: 1
+        update: true
+
+    # Run libadwaita + Nautilus glassy from the user copy (no sudo)
+    - name: Install WhiteSur libadwaita + Nautilus glassy (user; no sudo, user copy)
+      become: false
+      environment:
+       HOME: "/home/{{ user }}"
+      args:
+        chdir: "/home/{{ user }}/.cache/WhiteSur-gtk-theme"
+      shell: |
+        set -e
+        dbus-run-session -- ./install.sh -l -N glassy -c dark -t orange
+      register: whitesur_user
+      changed_when: >
+        'Installing' in (whitesur_user.stdout | default('')) or
+        'updated' in (whitesur_user.stdout | default(''))
+
+
+
+
+
+    # -------------------- GNOME Shell extensions --------------------
+    - name: Ensure per-user extensions directory exists
+      become_user: "{{ user }}"
+      file:
+        path: "/home/{{ user }}/.local/share/gnome-shell/extensions"
+        state: directory
+        mode: "0755"
+
+    - name: Clone/refresh blur-my-shell
+      become_user: "{{ user }}"
+      git:
+        repo: https://github.com/aunetx/blur-my-shell.git
+        dest: "/home/{{ user }}/.cache/ansible-src/blur-my-shell"
+        version: master
+        depth: 1
+        update: true
+
+    - name: Build & install blur-my-shell
+      become_user: "{{ user }}"
+      args:
+        chdir: "/home/{{ user }}/.cache/ansible-src/blur-my-shell"
+      shell: |
+        set -e
+        make install
+
+    - name: Clone/refresh dash-to-dock
+      become_user: "{{ user }}"
+      git:
+        repo: https://github.com/micheleg/dash-to-dock.git
+        dest: "/home/{{ user }}/.cache/ansible-src/dash-to-dock"
+        version: master
+        depth: 1
+        update: true
+
+    - name: Build & install dash-to-dock
+      become_user: "{{ user }}"
+      args:
+        chdir: "/home/{{ user }}/.cache/ansible-src/dash-to-dock"
+      shell: |
+        set -e
+        make install
+
+    - name: Enable recommended GNOME extensions for user
+      become_user: "{{ user }}"
+      shell: |
+        set -e
+        gnome-extensions enable user-theme@gnome-shell-extensions.gcampax.github.com || true
+        gnome-extensions enable dash-to-dock@micxgx.gmail.com || true
+        gnome-extensions enable blur-my-shell@aunetx || true
+      changed_when: false
+
+    # -------------------- apply theme (GTK + Shell) --------------------
+    - name: Apply GTK + Shell theme for the user
+      become_user: "{{ user }}"
+      shell: |
+        set -e
+        dbus-run-session -- gsettings set org.gnome.desktop.interface gtk-theme 'WhiteSur-Dark'
+        dbus-run-session -- gsettings set org.gnome.shell.extensions.user-theme name 'WhiteSur-Dark'
+      changed_when: false
+
+    # -------------------- wallpaper / lock screen --------------------
+    - name: Find wallpaper image (wallpaper.* under playbook_dir/images)
+      become_user: "{{ user }}"
+      find:
+        paths: "{{ playbook_dir }}/images"
+        patterns: "wallpaper.*"
+        file_type: file
+      register: wp_found
+
+    - name: Find lock screen image (lock_screen.* under playbook_dir/images)
+      become_user: "{{ user }}"
+      find:
+        paths: "{{ playbook_dir }}/images"
+        patterns: "lock_screen.*"
+        file_type: file
+      register: lock_found
+
+    - name: Select latest images if multiple exist
+      set_fact:
+        wallpaper_path: "{{ (wp_found.files | sort(attribute='mtime', reverse=true) | map(attribute='path') | list | first) | default('') }}"
+        lockscreen_path: "{{ (lock_found.files | sort(attribute='mtime', reverse=true) | map(attribute='path') | list | first) | default('') }}"
+
+    - name: Create system backgrounds dir
+      file:
+        path: /usr/share/backgrounds/WhiteSur
+        state: directory
+        mode: "0755"
+
+    - name: Derive wallpaper/lockscreen extensions (with defaults)
+      set_fact:
+        wallpaper_ext: "{{ (wallpaper_path | default('') | regex_search('\\.[^.]+$')) or '.jpg' }}"
+        lockscreen_ext: "{{ (lockscreen_path | default('') | regex_search('\\.[^.]+$')) or '.jpg' }}"
+
+    - name: Copy wallpaper to system path (if present)
+      when: wallpaper_path | default('') != ''
+      copy:
+        src: "{{ wallpaper_path }}"
+        dest: "/usr/share/backgrounds/WhiteSur/wallpaper{{ wallpaper_ext }}"
+        mode: "0644"
+
+    - name: Copy lock screen to system path (if present)
+      when: lockscreen_path | default('') != ''
+      copy:
+        src: "{{ lockscreen_path }}"
+        dest: "/usr/share/backgrounds/WhiteSur/lock_screen{{ lockscreen_ext }}"
+        mode: "0644"
+
+
+    # GDM uses its own dconf profile; make sure it exists
+    - name: Ensure /etc/dconf/profile/gdm exists
+      become: true
+      copy:
+        dest: /etc/dconf/profile/gdm
+        mode: "0644"
+        content: |
+          user-db:user
+          system-db:gdm
+          file-db:/usr/share/gdm/greeter-dconf-defaults
+
+    # Keyfiles for the GDM database live here
+    - name: Ensure /etc/dconf/db/gdm.d exists
+      become: true
+      file:
+        path: /etc/dconf/db/gdm.d
+        state: directory
+        mode: "0755"
+
+    # Only proceed if your system wallpaper file was staged earlier
+    - name: Stat system wallpaper for GDM
+      become: true
+      stat:
+        path: "/usr/share/backgrounds/WhiteSur/wallpaper{{ wallpaper_ext | default('.jpg') }}"
+      register: gdm_wp
+
+    # Write the GDM background keys (both light and dark)
+    - name: Configure GDM background via dconf keyfile
+      become: true
+      when: gdm_wp.stat.exists
+      copy:
+        dest: /etc/dconf/db/gdm.d/01-whitesur-background
+        mode: "0644"
+        content: |
+          [org/gnome/desktop/background]
+          picture-uri='file:///usr/share/backgrounds/WhiteSur/wallpaper{{ wallpaper_ext | default(".jpg") }}'
+          picture-uri-dark='file:///usr/share/backgrounds/WhiteSur/wallpaper{{ wallpaper_ext | default(".jpg") }}'
+
+    # Compile the GDM dconf database
+    - name: dconf update (rebuild GDM database)
+      become: true
+      command: dconf update
+      changed_when: true
+      register: dconf_update_result
+
+
+
+    - name: Apply user wallpaper (system path)
+      become_user: "{{ user }}"
+      when: wallpaper_path | default('') != ''
+      shell: |
+        set -e
+        dbus-run-session -- gsettings set org.gnome.desktop.background picture-uri "file:///usr/share/backgrounds/WhiteSur/wallpaper{{ wallpaper_ext }}"
+        dbus-run-session -- gsettings set org.gnome.desktop.background picture-uri-dark "file:///usr/share/backgrounds/WhiteSur/wallpaper{{ wallpaper_ext }}"
+      changed_when: false
+
+    - name: Apply user lock screen (system path)
+      become_user: "{{ user }}"
+      when: lockscreen_path | default('') != ''
+      shell: |
+        set -e
+        dbus-run-session -- gsettings set org.gnome.desktop.screensaver picture-uri "file:///usr/share/backgrounds/WhiteSur/lock_screen{{ lockscreen_ext }}"
+      changed_when: false
+
+    # -------------------- Flatpak theming fix --------------------
+    - name: Allow Flatpaks to read user GTK configs (overrides)
+      shell: |
+        flatpak override --filesystem=xdg-config/gtk-3.0
+        flatpak override --filesystem=xdg-config/gtk-4.0
+      changed_when: false
+
+    # Make sure the per-user copy exists (safe to re-run)
+    - name: Clone/refresh WhiteSur-gtk-theme (user copy for Flatpak tweaks)
+      become: false
+      git:
+        repo: https://github.com/vinceliuice/WhiteSur-gtk-theme.git
+        dest: "/home/{{ user }}/.cache/WhiteSur-gtk-theme"
+        version: master
+        depth: 1
+        update: true
+
+    # Run Flatpak theming from the user copy (no sudo)
+    - name: Connect theme to Flatpak apps (Dark + orange) via tweaks.sh
+      become: false
+      environment:
+        HOME: "/home/{{ user }}"
+      args:
+        chdir: "/home/{{ user }}/.cache/WhiteSur-gtk-theme"
+      shell: |
+        set -e
+        dbus-run-session -- ./tweaks.sh -F -c Dark -t orange
+      register: flatpak_theme
+      # Only fail if the script actually reports an error message
+      failed_when: >
+        flatpak_theme.rc != 0 and (
+          (flatpak_theme.stderr | default('')) | length > 0 or
+          'ERROR' in (flatpak_theme.stdout | default(''))
+        )
+      changed_when: false
+

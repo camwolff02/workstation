@@ -1,0 +1,83 @@
+- name: Initialize variables
+  set_fact:
+    # Also set auto-negotiation (helps some NICs stay powered for WoL after shutdown)
+    wol_set_autoneg: true
+
+- name: Ensure required packages are installed (NetworkManager, ethtool, pciutils)
+  apt:
+    name:
+      - network-manager
+      - ethtool
+      - pciutils
+    state: present
+    update_cache: true
+
+- name: Get all NetworkManager connections (name:type)
+  command: nmcli -t -f NAME,TYPE connection show
+  register: nm_connections
+  changed_when: false
+
+- name: Build list of Ethernet connection names
+  set_fact:
+    ethernet_connections: >-
+      {{ nm_connections.stdout_lines
+          | select('search', ':802-3-ethernet$')
+          | map('regex_replace', ':(.*)$', '')
+          | list }}
+
+- name: Warn if no Ethernet connections are managed by NetworkManager
+  debug:
+    msg: >
+      No '802-3-ethernet' NetworkManager connections were found. If you use
+      Netplan with systemd-networkd or other tooling, consider enabling WoL
+      via their configs instead.
+  when: ethernet_connections | length == 0
+
+- name: Enable WOL=magic on each Ethernet connection (persistent)
+  command: nmcli connection modify "{{ item }}" 802-3-ethernet.wake-on-lan magic
+  loop: "{{ ethernet_connections }}"
+  register: nm_wol_set
+  changed_when: "'successfully' in (nm_wol_set.stdout | default('')) or (nm_wol_set.stderr | default(''))"
+  when: ethernet_connections | length > 0
+
+- name: (Optional) Enable auto-negotiation on each Ethernet connection
+  command: nmcli connection modify "{{ item }}" 802-3-ethernet.auto-negotiate yes
+  loop: "{{ ethernet_connections }}"
+  when:
+    - wol_set_autoneg
+    - ethernet_connections | length > 0
+  register: nm_autoneg_set
+  changed_when: "'successfully' in (nm_autneg_set.stdout | default('')) or (nm_autneg_set.stderr | default(''))"
+
+- name: Get connected Ethernet device names (for immediate runtime apply)
+  command: nmcli -t -f DEVICE,TYPE,STATE device status
+  register: nm_devices
+  changed_when: false
+
+- name: Build list of active Ethernet devices
+  set_fact:
+    active_eth_devices: >-
+      {{ nm_devices.stdout_lines
+          | select('search', ':ethernet:connected$')
+          | map('regex_replace', ':.*$', '')
+          | list }}
+
+- name: Apply WOL=g immediately on each active Ethernet device
+  shell: ethtool -s {{ item }} wol g
+  loop: "{{ active_eth_devices }}"
+  register: ethtool_now
+  failed_when: false   # some NICs may not support WoL; don't fail the play
+  changed_when: false  # ethtool doesn't indicate change reliably
+
+- name: Show WOL status per active device
+  shell: ethtool {{ item }} | grep -E 'Supports Wake-on|Wake-on'
+  loop: "{{ active_eth_devices }}"
+  register: ethtool_status
+  changed_when: false
+
+- name: Print summary
+  debug:
+    msg:
+      - "Ethernet connections updated: {{ ethernet_connections | default([]) }}"
+      - "Active Ethernet devices: {{ active_eth_devices | default([]) }}"
+      - "Current ethtool status:\n{{ (ethtool_status.results | map(attribute='stdout') | join('\n---\n')) if ethtool_status is defined else 'n/a' }}"

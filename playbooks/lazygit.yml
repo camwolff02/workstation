@@ -1,0 +1,33 @@
+# ========================
+# Lazygit via .deb
+# ========================
+#
+- name: Get latest lazygit release info
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/jesseduffield/lazygit/releases/latest
+    return_content: yes
+  register: lazygit_release
+
+- name: Set lazygit download URL (tar.gz)
+  ansible.builtin.set_fact:
+    lazygit_version: "{{ lazygit_release.json.tag_name }}"
+    lazygit_tar_url: "https://github.com/jesseduffield/lazygit/releases/download/{{ lazygit_release.json.tag_name }}/lazygit_{{ lazygit_release.json.tag_name | regex_replace('v', '') }}_Linux_x86_64.tar.gz"
+
+- name: Download lazygit tar.gz package
+  ansible.builtin.get_url:
+    url: "{{ lazygit_tar_url }}"
+    dest: /tmp/lazygit.tar.gz
+    mode: '0644'
+
+- name: Extract lazygit binary
+  ansible.builtin.unarchive:
+    src: /tmp/lazygit.tar.gz
+    dest: /tmp/
+    remote_src: yes
+
+- name: Install lazygit executable
+  ansible.builtin.copy:
+    src: "/tmp/lazygit"
+    dest: /usr/local/bin/lazygit
+    mode: '0755'
+

@@ -1,0 +1,95 @@
+- name: Set installer constant variables
+  set_fact:
+    nextcloud_version: "3.17.2"
+    arch: "x86_64"  # this playbook targets the x86_64 AppImage URL provided
+    appimage_dir: "/opt/nextcloud"
+    symlink_path: "/usr/local/bin/nextcloud"
+
+- name: Set installer dynamic variables
+  set_fact:
+    appimage_filename: "Nextcloud-{{ nextcloud_version }}-{{ arch }}.AppImage"
+
+- name: Set more installer dynamic variables (cannot reference and use variable in same step)
+  set_fact:
+    appimage_path: "{{ appimage_dir }}/{{ appimage_filename }}"
+    appimage_url: "https://github.com/nextcloud-releases/desktop/releases/download/v{{ nextcloud_version }}/{{ appimage_filename }}"
+
+- name: Ensure host architecture is x86_64
+  assert:
+    that:
+      - ansible_architecture == "x86_64"
+    fail_msg: "This installer uses an x86_64 AppImage; host arch is {{ ansible_architecture }}."
+    success_msg: "Architecture OK (x86_64)."
+
+- name: Ensure FUSE libraries for AppImage (Debian/Ubuntu)
+  apt:
+    name: "{{ (ansible_distribution == 'Ubuntu' and (ansible_distribution_major_version | int) >= 24) | ternary('libfuse2t64', 'libfuse2') }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Ensure FUSE libraries (RHEL/Fedora/CentOS/Rocky/Alma)
+  package:
+    name:
+      - fuse
+      - fuse3
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Ensure FUSE2 (Arch)
+  pacman:
+    name: fuse2
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Archlinux"
+
+- name: Ensure libfuse2 (SUSE)
+  zypper:
+    name: libfuse2
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Suse"
+
+- name: Ensure {{ appimage_dir }} exists
+  file:
+    path: "{{ appimage_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Fetch {{ appimage_filename }}
+  get_url:
+    url: "{{ appimage_url }}"
+    dest: "{{ appimage_path }}"
+    mode: "0755"
+    force: no
+
+- name: Symlink {{ symlink_path }} -> {{ appimage_path }}
+  file:
+    src: "{{ appimage_path }}"
+    dest: "{{ symlink_path }}"
+    state: link
+    force: true
+
+- name: Install /usr/share/applications/nextcloud.desktop
+  copy:
+    dest: /usr/share/applications/nextcloud.desktop
+    mode: "0644"
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Nextcloud
+      Comment=Nextcloud Desktop Client
+      Exec={{ symlink_path }}
+      Icon=nextcloud
+      Terminal=false
+      Categories=Network;FileTransfer;
+      StartupWMClass=nextcloud
+
+- name: Print how to launch Nextcloud
+  debug:
+    msg: |
+      Installed Nextcloud Desktop AppImage {{ nextcloud_version }} at {{ appimage_path }}.
+      Launch from your app menu or run: {{ symlink_path }}
+

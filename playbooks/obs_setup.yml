@@ -1,0 +1,10 @@
+ 
+  - name: add the repository for OBS
+    apt_repository:
+      repo: 'ppa:obsproject/obs-studio'
+
+  - name: install OBS
+    apt:
+      name: 
+        - obs-studio
+

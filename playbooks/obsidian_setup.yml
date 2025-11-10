@@ -1,0 +1,28 @@
+
+- name: Download Obsidian
+  get_url:
+    url: "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/obsidian_1.7.7_amd64.deb"
+    dest: /tmp/obsidian.deb
+  tags:
+    - minimal-install
+    - install
+    - obsidian
+
+- name: Install Obsidian
+  become: true
+  apt:
+    deb: /tmp/obsidian.deb
+    state: present
+  tags:
+    - minimal-install
+    - install
+    - obsidian
+
+- name: Remove Obsidian .deb package
+  file:
+    path: /tmp/obsidian.deb
+    state: absent
+  tags:
+    - minimal-install
+    - install
+    - obsidian

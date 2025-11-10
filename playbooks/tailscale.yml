@@ -1,0 +1,41 @@
+# ---------- Tailscale ----------
+- name: Install Tailscale
+  apt:
+    name: tailscale
+    state: present
+    update_cache: true
+
+- name: Ensure tailscaled enabled and started
+  systemd:
+    name: tailscaled
+    enabled: true
+    state: started
+
+# Create drop-in dir before writing override.conf
+- name: Ensure tailscaled drop-in directory exists
+  file:
+    path: /etc/systemd/system/tailscaled.service.d
+    state: directory
+    mode: "0755"
+
+# Detect tailscaled path (fallback to /usr/sbin/tailscaled)
+- name: Detect tailscaled binary
+  shell: "command -v tailscaled || echo /usr/sbin/tailscaled"
+  register: tailscaled_bin
+  changed_when: false
+
+- name: Ensure tailscale starts with --ssh at boot (ExecStart override)
+  copy:
+    dest: /etc/systemd/system/tailscaled.service.d/override.conf
+    mode: "0644"
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart={{ tailscaled_bin.stdout | trim }} --state=/var/lib/tailscale/tailscaled.state --socket=/run/tailscale/tailscaled.sock --port=41641 --ssh
+  notify: Reload systemd and restart tailscaled
+
+- name: Remove any obsolete tailscale-up unit
+  file:
+    path: /etc/systemd/system/tailscale-up.service
+    state: absent
+  notify: Reload systemd

@@ -1,0 +1,3 @@
+- name: Set system time to 12 hour
+  become: "{{ user }}"
+  command: "gsettings set com.canonical.indicator.datetime time-format 12-hour"

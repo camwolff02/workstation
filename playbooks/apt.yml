@@ -1,0 +1,44 @@
+- name: Install apt packages
+  apt:
+    name:
+      - build-essential
+      - cmake
+      - gcc
+      - g++
+      - make
+      - git
+      - gh
+      - curl
+      - unzip
+      - fzf
+      - ripgrep
+      - fd-find
+      - stow
+
+      - lua5.4  # for neovim
+      - luarocks
+      - nodejs
+      - golang
+
+      - jq  # for json validation
+      - tree  # for traversing file tree
+      - tmux  # terminal window service
+      - ffmpeg  # file format conversions
+      - libfuse2
+      - speedtest-cli  # for running internet speed tests
+      - openssh-client
+      - openssh-server
+      - net-tools  # for commands like arp
+
+      - pandoc  # for converting between document formats
+      - latexmk  # rendering latex documents
+      - texlive-luatex
+      - texlive-science
+      - texlive-latex-extra
+      - texlive-fonts-recommended
+      - texlive-fonts-extra
+      - yt-dlp  # downloading youtube videos
+      - libudev-dev  # for espflash and cargo-espflash
+    update_cache: true
+  tags:
+    - latest

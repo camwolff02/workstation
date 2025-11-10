@@ -1,6 +1,0 @@
-enable_tailscale: true
-enable_xorg_virtual: true
-enable_sunshine: true
-enable_wol: false
-tailscale_authkey: ""     # or tskey-xxxx (or leave empty and login once manually)
-

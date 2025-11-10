@@ -1,0 +1,12 @@
+- name: Install applications using Snap
+  community.general.snap:
+    name:
+      - steam
+      # - bitwarden
+      # - discord
+- name: Install classic applications using Snap
+  community.general.snap:
+    name:
+      - ghostty
+      - nvim
+    classic: true

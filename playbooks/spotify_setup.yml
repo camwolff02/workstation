@@ -1,0 +1,14 @@
+
+- name: get Spotify apt key
+  apt_key:
+    url: "https://download.spotify.com/debian/pubkey_6224F9941A8AA6D1.gpg"
+    keyring: /etc/apt/trusted.gpg.d/spotify.gpg 
+
+- name: Configure Spotify debian repository
+  shell: 
+    echo "deb http://repository.spotify.com stable non-free" | sudo tee /etc/apt/sources.list.d/spotify.list
+
+- name: Update repository index with Spotify and install spotify
+  apt:
+    update_cache: true
+    name: spotify-client

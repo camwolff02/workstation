@@ -1,0 +1,20 @@
+- name: Ensure add-apt-repository is available
+  apt:
+    name: software-properties-common
+    state: present
+    update_cache: true
+
+- name: Add fish-shell PPA (release-4)
+  apt_repository:
+    repo: ppa:fish-shell/release-4
+    state: present
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+
+- name: Install fish shell
+  apt:
+    name: fish
+    state: present
+

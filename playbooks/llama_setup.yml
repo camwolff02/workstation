@@ -1,0 +1,26 @@
+# Importable tasks for installing llama.cpp, llama-server, and llama-swap
+- name: Clone llama.cpp repository
+  ansible.builtin.git:
+    repo: https://github.com/ggml-org/llama.cpp.git
+    dest: /usr/local/src/llama.cpp
+    version: master
+    update: yes
+
+- name: Build llama.cpp (llama + llama-server)
+  ansible.builtin.shell: |
+    cd /usr/local/src/llama.cpp
+    mkdir -p build
+    cd build
+    cmake .. -DLLAMA_CURL=ON -DLLAMA_BUILD_SERVER=ON
+    make -j "$(nproc)"
+  args:
+    creates: /usr/local/src/llama.cpp/build/bin/llama-server
+
+- name: Copy built llama server binary to /usr/local/bin as llama-server
+  ansible.builtin.copy:
+    src: /usr/local/src/llama.cpp/build/bin/llama-server
+    dest: /usr/local/bin/llama-server
+    remote_src: true
+    mode: '0755'
+
+

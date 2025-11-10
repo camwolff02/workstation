@@ -1,0 +1,6 @@
+[submodule "dotfiles/lazyvim"]
+	path = dotfiles/nvim
+	url = git@github.com:camwolff02/lazyvim.git
+[submodule "dotfiles/.config/nvim"]
+	path = dotfiles/.config/nvim
+	url = git@github.com:camwolff02/lazyvim.git
