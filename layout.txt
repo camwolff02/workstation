@@ -1,0 +1,25 @@
+workstation/
+├─ scripts/
+│  ├─ bootstrap.sh            # single command after a fresh Ubuntu install
+│  ├─ svc                     # tiny service toggler (enable/disable/list)
+│  └─ wrap-nixgl.sh           # creates nixGL wrappers for GUI apps
+├─ services/
+│  ├─ config.sh               # enable/disable flags (bash vars)
+│  ├─ system/                 # systemd system units (start at boot)
+│  │  ├─ tailscale-up.service
+│  │  ├─ xorg-virtual-display.service
+│  │  └─ sunshine.service
+│  └─ user/                   # (optional) user services
+├─ dotfiles/                  # Stow packages (no Home-Manager)
+│  ├─ fish/.config/fish/config.fish
+│  ├─ nvim/.config/nvim/init.lua
+│  ├─ ghostty/.config/ghostty/config
+│  ├─ nix/.config/nix/nix.conf
+│  ├─ git/.gitconfig
+│  ├─ tmux/.tmux.conf
+│  └─ ... (add more over time)
+├─ nix/
+│  ├─ flake.nix               # pin nixpkgs; one “meta-package” env
+│  └─ flake.lock
+└─ README.md
+

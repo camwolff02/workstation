@@ -1,0 +1,25 @@
+workstation/
+├─ site.yml                 # Ansible playbook (the bootstrap, end-to-end)
+├─ vars/
+│  └─ local.yml            # Your toggles, user overrides (not committed if you prefer)
+├─ scripts/
+│  └─ repos.txt            # One URL per line → cloned/updated to ~/src
+├─ files/                  # Config files Ansible deploys
+│  ├─ systemd/
+│  │  ├─ tailscale-up.service
+│  │  ├─ xorg-virtual-display.service
+│  │  └─ sunshine.service
+│  ├─ wireplumber/51-ldac.lua
+│  └─ xorg/99-virtual-display.conf
+├─ nix/
+│  ├─ flake.nix            # Pinned, reproducible app set via Nix
+│  └─ flake.lock
+└─ dotfiles/               # Stow packages (your configs only, no HM needed)
+   ├─ fish/.config/fish/{config.fish,conf.d/aliases.fish}
+   ├─ nvim/.config/nvim/init.lua
+   ├─ ghostty/.config/ghostty/config
+   ├─ nix/.config/nix/nix.conf
+   ├─ git/.gitconfig        # (optional; we also set git config in playbook)
+   ├─ tmux/.tmux.conf
+   └─ … add more over time
+
