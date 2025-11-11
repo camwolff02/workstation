@@ -1,2 +1,2 @@
 - name: Stow dotfiles
-  shell: stow --adopt -vt ~ dotfiles 
+  shell: stow  -vt "/home/{{ user }}" dotfiles

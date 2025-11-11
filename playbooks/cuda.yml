@@ -1,0 +1,55 @@
+- name: Ensure required APT tools are present
+  apt:
+    name:
+      - software-properties-common
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - curl
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Enable restricted & multiverse (needed for proprietary NVIDIA drivers)
+  command: add-apt-repository -y "{{ item }}"
+  args:
+    creates: "/etc/apt/sources.list.d/{{ item | regex_replace('^ppa:','ppa_') | regex_replace('[/: ]','_') }}.list"
+  loop:
+    - restricted
+    - multiverse
+  become: yes
+
+- name: Install kernel headers for the running kernel (per NVIDIA guidance)
+  apt:
+    name: "linux-headers-{{ ansible_kernel }}"
+    state: present
+  become: yes
+
+- name: Install NVIDIA proprietary driver (580 series)
+  apt:
+    name:
+      - nvidia-driver-580
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Optional tools useful for validation (vulkaninfo, nvidia-settings)
+  apt:
+    name:
+      - vulkan-tools
+      - nvidia-settings
+    state: present
+  become: yes
+
+# --- CUDA 12.8 repository and toolkit (optional but recommended for dev) ---
+- name: Add NVIDIA CUDA repo keyring (Ubuntu 24.04)
+  apt:
+    deb: "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb"
+  become: yes
+
+- name: Install CUDA Toolkit 12.8
+  apt:
+    name: cuda-toolkit-12-8
+    state: present
+    update_cache: yes
+  become: yes

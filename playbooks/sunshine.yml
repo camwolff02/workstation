@@ -1,0 +1,208 @@
+- name: Set sensible defaults for streaming session
+  set_fact:
+    stream_user: "{{ ansible_user_id }}"
+    sunshine_display: "1"
+    virtual_w: "2560"
+    virtual_h: "1664"
+
+- name: Ensure packages for Xorg + Openbox + PipeWire are installed
+  apt:
+    name:
+      - xorg
+      - x11-xserver-utils
+      - xinit
+      - openbox
+      - pipewire
+      - wireplumber
+      - xrandr
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Create Xorg headless config directory
+  file:
+    path: /etc/X11/xorg.conf.d
+    state: directory
+    mode: "0755"
+  become: yes
+
+- name: Configure NVIDIA headless virtual screen for display :{{ sunshine_display }}
+  copy:
+    dest: /etc/X11/xorg.conf.d/95-virtual-headless.conf
+    mode: "0644"
+    content: |
+      Section "Device"
+        Identifier "Device0"
+        Driver "nvidia"
+        Option "AllowEmptyInitialConfiguration"
+        Option "HardDPMS" "false"
+        # Use the real BusID if you want to pin a specific GPU (run `nvidia-smi -q | grep -i Bus`)
+        # BusID "PCI:1:0:0"
+      EndSection
+
+      Section "Screen"
+        Identifier "Screen0"
+        Device "Device0"
+        DefaultDepth 24
+        SubSection "Display"
+          Depth 24
+          Virtual {{ virtual_w }} {{ virtual_h }}
+        EndSubSection
+      EndSection
+  become: yes
+
+- name: Systemd service to launch a dedicated headless Xorg on :%i
+  copy:
+    dest: /etc/systemd/system/xorg-virtual@.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Headless Xorg on :%i for Sunshine
+      After=systemd-logind.service
+      Wants=systemd-logind.service
+
+      [Service]
+      ExecStart=/usr/lib/xorg/Xorg :%i -noreset -verbose 3 -logfile /var/log/Xorg-virtual-%i.log
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+  become: yes
+
+- name: Reload systemd (new unit)
+  systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: Enable and start headless Xorg on :{{ sunshine_display }}
+  systemd:
+    name: "xorg-virtual@{{ sunshine_display }}"
+    state: started
+    enabled: yes
+  become: yes
+
+# --- User-level services (Openbox + Sunshine bound to the virtual display) ---
+
+- name: Allow user services to run without login
+  command: "loginctl enable-linger {{ stream_user }}"
+  become: yes
+
+- name: Create user systemd directory
+  file:
+    path: "/home/{{ stream_user }}/.config/systemd/user"
+    state: directory
+    owner: "{{ stream_user }}"
+    group: "{{ stream_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Create Openbox user unit bound to DISPLAY=:%i
+  copy:
+    dest: "/home/{{ stream_user }}/.config/systemd/user/openbox-virtual@.service"
+    owner: "{{ stream_user }}"
+    group: "{{ stream_user }}"
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Openbox session on DISPLAY=:%i
+      After=default.target
+      BindsTo=default.target
+
+      [Service]
+      Environment=DISPLAY=:%i
+      ExecStart=/usr/bin/openbox-session
+      ExecStartPost=/usr/bin/bash -lc '/usr/bin/xrandr -display :%i -screen 0 -s {{ virtual_w }}x{{ virtual_h }} || true'
+      Restart=on-failure
+
+      [Install]
+      WantedBy=default.target
+  become: yes
+
+- name: Download Sunshine Ubuntu 24.04 package
+  get_url:
+    url: "https://github.com/LizardByte/Sunshine/releases/latest/download/sunshine-ubuntu-24.04-amd64.deb"
+    dest: "/tmp/sunshine-ubuntu.deb"
+    mode: "0644"
+
+- name: Install Sunshine
+  apt:
+    deb: "/tmp/sunshine-ubuntu.deb"
+  become: yes
+
+- name: Create Sunshine config dir
+  file:
+    path: "/home/{{ stream_user }}/.config/sunshine"
+    state: directory
+    owner: "{{ stream_user }}"
+    group: "{{ stream_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Set Sunshine config (NVENC + useful resolutions/fps)
+  copy:
+    dest: "/home/{{ stream_user }}/.config/sunshine/sunshine.conf"
+    owner: "{{ stream_user }}"
+    group: "{{ stream_user }}"
+    mode: "0644"
+    content: |
+      encoder = nvenc
+      nv_preset = p4
+      hevc_mode = 1
+      fps = [60, 120]
+      resolutions = [ {{ virtual_w }}x{{ virtual_h }}, 1920x1080, 2560x1440, 3440x1440 ]
+      origin_web_ui_allowed = lan
+      upnp = disabled
+
+- name: Add user service override for Sunshine to bind to DISPLAY=:%i
+  copy:
+    dest: "/home/{{ stream_user }}/.config/systemd/user/sunshine.service.d/override.conf"
+    owner: "{{ stream_user }}"
+    group: "{{ stream_user }}"
+    mode: "0644"
+    content: |
+      [Service]
+      Environment=DISPLAY=:{{ sunshine_display }}
+  become: yes
+
+- name: Ensure drop-in directory exists (in case package didn't create it)
+  file:
+    path: "/home/{{ stream_user }}/.config/systemd/user/sunshine.service.d"
+    state: directory
+    owner: "{{ stream_user }}"
+    group: "{{ stream_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Reload user systemd (daemon-reload)
+  systemd:
+    scope: user
+    daemon_reload: yes
+  become: yes
+  become_user: "{{ stream_user }}"
+
+- name: Enable and start Openbox on :{{ sunshine_display }}
+  systemd:
+    scope: user
+    name: "openbox-virtual@{{ sunshine_display }}.service"
+    state: started
+    enabled: yes
+  become: yes
+  become_user: "{{ stream_user }}"
+
+- name: Enable and start Sunshine (user service)
+  systemd:
+    scope: user
+    name: sunshine.service
+    state: started
+    enabled: yes
+  become: yes
+  become_user: "{{ stream_user }}"
+
+# Optional: open Sunshine Web UI port if UFW is in use
+- name: Allow Sunshine Web UI (47990/tcp) through UFW, if present
+  ufw:
+    rule: allow
+    port: "47990"
+    proto: tcp
+  when: ansible_facts.packages.ufw is defined
+  become: yes

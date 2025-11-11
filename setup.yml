@@ -31,6 +31,7 @@
     #      version: main  
     #      update: yes
     #      recursive: yes
+
     tasks:
       - name: Get current working directory
         shell: pwd
@@ -38,30 +39,33 @@
       - set_fact:
           playbook_path: "{{ playbook_path_out.stdout }}"
 
-      # Core Tasks
+      # Setup dotfiles first to prevent overwrite
+      - import_tasks: playbooks/dotfiles.yml
+
+      # Standard package installations
       - import_tasks: playbooks/apt.yml
       - import_tasks: playbooks/flatpak.yml
       - import_tasks: playbooks/snap.yml
-      - import_tasks: playbooks/docker.yml
-      - import_tasks: playbooks/wake_on_lan.yml
-      - import_tasks: playbooks/gnome.yml
 
-      # Coding
+      # Development tools
+      - import_tasks: playbooks/cuda.yml
       - import_tasks: playbooks/tailscale.yml
-      - import_tasks: playbooks/uv.yml
+      - import_tasks: playbooks/docker.yml
       - import_tasks: playbooks/fish.yml
       - import_tasks: playbooks/lazygit.yml
-      - import_tasks: playbooks/rust.yml
-      - import_tasks: playbooks/dotfiles.yml
-
-      # Core Apps
       - import_tasks: playbooks/ghostty.yml
+      - import_tasks: playbooks/rust.yml
+      - import_tasks: playbooks/uv.yml
       - import_tasks: playbooks/fonts.yml
+      - import_tasks: playbooks/wake_on_lan.yml
 
-      # Specialized Apps
+      # External apps
       - import_tasks: playbooks/orca_slicer.yml
+      # - import_tasks: playbooks/sunshine.yml
+
+      # Aesthetics
+      - import_tasks: playbooks/gnome.yml
 
       # Tempramental/Undesired
-      # - import_tasks: playbooks/llama_setup.yml
       # - import_tasks: tasks/code_setup.yml  # TODO uncomment when figure out how to check if code is already installed
-      # - import_tasks: tasks/spotify_setup.yml
+      # - import_tasks: tasks/spotify_setup.yml  # I just don't want spotify

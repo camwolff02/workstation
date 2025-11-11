@@ -1,3 +1,5 @@
+# TODO FIGURE OUT HOW TO AUTO START WITH SSH
+
 # ---------- Tailscale ----------
 - name: Install Tailscale
   apt:
