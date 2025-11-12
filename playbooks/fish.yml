@@ -18,3 +18,38 @@
     name: fish
     state: present
 
+- name: Ensure fish is installed
+  apt:
+    name: fish
+    state: present
+    update_cache: true
+
+- name: Ensure /usr/bin/fish exists (sanity check)
+  stat:
+    path: /usr/bin/fish
+  register: fish_bin
+
+- name: Fail if /usr/bin/fish not found
+  fail:
+    msg: "/usr/bin/fish not found after install."
+  when: not fish_bin.stat.exists
+
+- name: Ensure /usr/bin/fish is listed in /etc/shells
+  lineinfile:
+    path: /etc/shells
+    line: /usr/bin/fish
+    state: present
+
+- name: Set login shell to fish for current user
+  user:
+    name: "{{ user }}"
+    shell: /usr/bin/fish
+
+- name: Show current shell for user
+  command: getent passwd "{{ user }}"
+  register: passwd_line
+  changed_when: false
+
+- name: Debug current shell
+  debug:
+    msg: "{{ passwd_line.stdout }}"
