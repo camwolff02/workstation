@@ -48,7 +48,7 @@
 # # Just for example:
 # resize-overlay-duration = 4s 200ms
 window-height = 34
-window-width = 80
+window-width = 82
 theme = dark:Gruvbox Dark, light:Gruvbox Light
 font-family = FiraCode Nerd Font Mono Med
 command = /usr/bin/fish --login --interactive

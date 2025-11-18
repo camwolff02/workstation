@@ -33,6 +33,7 @@
       - com.nextcloud.desktopclient.nextcloud
       - com.obsproject.Studio
       - me.proton.Mail
+      - org.localsend.localsend_app
       - us.zoom.Zoom
       - org.kiwix.desktop
       - com.spotify.Client
