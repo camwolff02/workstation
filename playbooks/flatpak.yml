@@ -34,6 +34,11 @@
       - com.obsproject.Studio
       - me.proton.Mail
       - us.zoom.Zoom
+      - org.kiwix.desktop
+      - com.spotify.Client
+      - com.visualstudio.code
+      - com.github.IsmaelMartinez.teams_for_linux
+      - com.slack.Slack
     remote: flathub
     method: user
     state: present

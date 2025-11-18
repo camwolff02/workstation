@@ -1,0 +1,15 @@
+- name: Map architecture to Fastfetch asset name
+  ansible.builtin.set_fact:
+    ff_arch: >-
+      {{ 'amd64' if ansible_architecture == 'x86_64'
+          else 'aarch64' if ansible_architecture in ['aarch64','arm64']
+          else ansible_architecture }}
+
+- name: Install Fastfetch via .deb (latest release)
+  ansible.builtin.apt:
+    deb: "https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-{{ ff_arch }}.deb"
+
+- name: Verify Fastfetch is installed
+  ansible.builtin.command: fastfetch --version
+  changed_when: false
+
