@@ -10,16 +10,9 @@
       - gh
       - curl
       - unzip
-      - fzf
-      - ripgrep
-      - fd-find
       - stow
 
-      - lua5.4  # for neovim
-      - luarocks
-      - nodejs
       - golang
-      - python3-pip
 
       - jq  # for json validation
       - tree  # for traversing file tree
@@ -40,6 +33,8 @@
       - texlive-fonts-extra
       - yt-dlp  # downloading youtube videos
       - libudev-dev  # for espflash and cargo-espflash
+      - gimp  # photoshop alternative
+
     update_cache: true
   tags:
     - latest

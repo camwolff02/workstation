@@ -33,13 +33,15 @@
       - com.nextcloud.desktopclient.nextcloud
       - com.obsproject.Studio
       - me.proton.Mail
-      - org.localsend.localsend_app
+      - org.localsend.localsend_app  # Airdrop
       - us.zoom.Zoom
-      - org.kiwix.desktop
+      - org.kiwix.desktop  # Offline Wikipedia
       - com.spotify.Client
-      - com.visualstudio.code
       - com.github.IsmaelMartinez.teams_for_linux
       - com.slack.Slack
+      - io.github.ungoogled_software.ungoogled_chromium
+      - org.kde.haruna  # Video player
+      - org.musicbrainz.Picard  # Music metadat
     remote: flathub
     method: user
     state: present

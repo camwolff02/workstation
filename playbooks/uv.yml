@@ -2,3 +2,10 @@
   become: false
   shell: |
     curl -LsSf https://astral.sh/uv/install.sh | sh
+
+- name: Install Ruff via uv tool (latest)
+  become: false
+  ansible.builtin.command: uv tool install ruff@latest
+  args:
+    creates: "{{ ansible_env.HOME }}/.local/bin/ruff"
+

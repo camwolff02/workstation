@@ -1,72 +1,63 @@
 ---
-  - name: Workstation Setup
-    hosts: localhost
-    connection: local
-    gather_facts: true
-    become: true
+- name: Workstation Setup
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
 
-    vars:
-      user: "{{ ansible_env.SUDO_USER | default(ansible_env.LOGNAME | default(ansible_user_id)) }}"
+  vars:
+    user: "{{ ansible_env.SUDO_USER | default(ansible_env.LOGNAME | default(ansible_user_id)) }}"
 
-    handlers:
-      - name: Reload systemd and restart tailscaled
-        systemd:
-          daemon-reload: true
-          name: tailscaled
-          state: restarted
-        
-      - name: Reload systemd
-        systemd:
-          daemon-reload: true
-
+  handlers:
     # TODO figure out how to auto clone submodules recursively
-    # pre_tasks:
-    #  - name: Update repository index
-    #    apt:
-    #      update_cache: true
-    #  - name: Update git submodules
-    #    ansible.builtin.git:
-    #      repo: "{{ playbook_dir }}"
-    #      dest: "{{ playbook_dir }}"
-    #      version: main  
-    #      update: yes
-    #      recursive: yes
+  # pre_tasks:
+  #  - name: Update repository index
+  #    apt:
+  #      update_cache: true
+  #  - name: Update git submodules
+  #    ansible.builtin.git:
+  #      repo: "{{ playbook_dir }}"
+  #      dest: "{{ playbook_dir }}"
+  #      version: main
+  #      update: yes
+  #      recursive: yes
 
-    tasks:
-      - name: Get current working directory
-        shell: pwd
-        register: playbook_path_out
-      - set_fact:
-          playbook_path: "{{ playbook_path_out.stdout }}"
+  tasks:
+    - name: Get current working directory
+      shell: pwd
+      register: playbook_path_out
+    - set_fact:
+        playbook_path: "{{ playbook_path_out.stdout }}"
 
-      # Setup dotfiles first to prevent overwrite
-      - import_tasks: playbooks/dotfiles.yml
+    # Setup dotfiles first to prevent overwrite
+    - import_tasks: playbooks/dotfiles.yml
 
-      # Standard package installations
-      - import_tasks: playbooks/apt.yml
-      - import_tasks: playbooks/fish.yml
-      - import_tasks: playbooks/flatpak.yml
-      - import_tasks: playbooks/snap.yml
+    # Standard package installations
+    - import_tasks: playbooks/apt.yml
+    - import_tasks: playbooks/fish.yml
+    - import_tasks: playbooks/flatpak.yml
+    - import_tasks: playbooks/snap.yml
 
-      # Development tools
-      # - import_tasks: playbooks/cuda.yml  # ERRORS
-      # - import_tasks: playbooks/tailscale.yml  # ERRORS
-      - import_tasks: playbooks/docker.yml
-      - import_tasks: playbooks/lazygit.yml
-      - import_tasks: playbooks/ghostty.yml
-      - import_tasks: playbooks/rust.yml
-      - import_tasks: playbooks/uv.yml
-      - import_tasks: playbooks/fonts.yml
-      - import_tasks: playbooks/wake_on_lan.yml
+    # Development tools
+    # - import_tasks: playbooks/cuda.yml  # ERRORS
+    # - import_tasks: playbooks/tailscale.yml  # ERRORS
+    - import_tasks: playbooks/neovim.yml
+    - import_tasks: playbooks/docker.yml
+    - import_tasks: playbooks/lazygit.yml
+    - import_tasks: playbooks/ghostty.yml
+    - import_tasks: playbooks/rust.yml
+    - import_tasks: playbooks/uv.yml
+    - import_tasks: playbooks/fonts.yml
+    - import_tasks: playbooks/wake_on_lan.yml
 
-      # External apps
-      - import_tasks: playbooks/fastfetch.yml
-      - import_tasks: playbooks/orca_slicer.yml
-      # - import_tasks: playbooks/sunshine.yml  # ERRORS
+    # External apps
+    - import_tasks: playbooks/fastfetch.yml
+    - import_tasks: playbooks/orca_slicer.yml
+    # - import_tasks: playbooks/sunshine.yml  # ERRORS
 
-      # Aesthetics
-      - import_tasks: playbooks/gnome.yml
+    # Aesthetics
+    - import_tasks: playbooks/gnome.yml
 
-      # Tempramental/Undesired
-      # - import_tasks: tasks/code_setup.yml  # TODO uncomment when figure out how to check if code is already installed
-      # - import_tasks: tasks/spotify_setup.yml  # I just don't want spotify
+    # Tempramental/Undesired
+    # - import_tasks: tasks/code_setup.yml  # TODO uncomment when figure out how to check if code is already installed
+    # - import_tasks: tasks/spotify_setup.yml  # I just don't want spotify

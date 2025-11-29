@@ -1,15 +1,24 @@
 # File: nvim_dev_setup.yml
 # Purpose: Importable tasks for setting up Neovim + LazyVim and related tools on Ubuntu.
 
-- name: Install required packages (Lua, git, unzip, curl, build-essential)
+- name: Install required packages for NeoVim and LazyVim
   ansible.builtin.apt:
     name:
-      - lua5.1
+      - lua5.4
       - luarocks
       - git
       - unzip
       - curl
       - build-essential
+      - git 
+      - gcc
+      - fzf
+      - ripgrep
+      - fd-find
+      - sqlite3
+      - nodejs
+      - npm
+      - python3-pip
     state: present
     update_cache: true
 
@@ -69,46 +78,6 @@
     state: link
     force: true
 
-
-# ========================
-# Handle LazyVim config
-# ========================
-
-# - name: Check if ~/.config/nvim exists
-#   ansible.builtin.stat:
-#     path: "{{ lookup('env', 'HOME') }}/.config/nvim"
-#   register: nvim_dir
-#
-# - name: Check if ~/.config/nvim is a Git repo
-#   ansible.builtin.stat:
-#     path: "{{ lookup('env', 'HOME') }}/.config/nvim/.git"
-#   register: nvim_git
-#
-# - name: Pull latest LazyVim config if already a Git repo
-#   ansible.builtin.git:
-#     repo: 'https://github.com/camwolff02/lazyvim_starter.git'
-#     dest: "{{ lookup('env', 'HOME') }}/.config/nvim"
-#     version: main
-#     update: yes
-#   when:
-#     - nvim_dir.stat.exists
-#     - nvim_git.stat.exists
-#
-# - name: Backup existing ~/.config/nvim if not a Git repo
-#   ansible.builtin.command:
-#     cmd: mv "{{ lookup('env', 'HOME') }}/.config/nvim" "{{ lookup('env', 'HOME') }}/.config/nvim.bak.{{ ansible_date_time.iso8601 }}"
-#   when:
-#     - nvim_dir.stat.exists
-#     - not nvim_git.stat.exists
-#
-# - name: Clone LazyVim if ~/.config/nvim was missing or backed up
-#   ansible.builtin.git:
-#     repo: 'https://github.com/camwolff02/lazyvim_starter.git'
-#     dest: "{{ lookup('env', 'HOME') }}/.config/nvim"
-#     version: main
-#   when:
-#     - not nvim_dir.stat.exists or (nvim_dir.stat.exists and not nvim_git.stat.exists)
-
 # ========================
 # Font: FiraCode Nerd Font
 # ========================
@@ -134,28 +103,6 @@
 - name: Refresh font cache
   ansible.builtin.command:
     cmd: fc-cache -fv
-
-# ========================
-# FZF + ripgrep + fd
-# ========================
-
-- name: Install fzf (cloning install script)
-  ansible.builtin.apt:
-    name: fzf
-    state: present
-    update_cache: true
-
-- name: Install ripgrep
-  ansible.builtin.apt:
-    name: ripgrep
-    state: present
-    update_cache: true
-
-- name: Install fd (fd-find)
-  ansible.builtin.apt:
-    name: fd-find
-    state: present
-    update_cache: true
 
 # ========================
 # Lazygit via .deb
@@ -189,4 +136,21 @@
     src: "/tmp/lazygit"
     dest: /usr/local/bin/lazygit
     mode: '0755'
+
+# ========================
+# NPM Packages 
+# ========================
+- name: Ensure global Prettier CLI is installed
+  community.general.npm:
+    name: prettier
+    global: true
+    state: present
+    version: latest
+
+- name: Ensure ast-grep CLI is installed globally
+  community.general.npm:
+    name: "@ast-grep/cli"
+    global: true
+    state: present
+    version: latest
 

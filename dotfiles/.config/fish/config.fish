@@ -7,4 +7,5 @@ function fish_greeting
 end
 
 alias vim nvim
+set -gx NOREPLY 36940948+camwolff02@users.noreply.github.com
 fish_add_path /home/cam/.pixi/bin
