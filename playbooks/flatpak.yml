@@ -41,7 +41,10 @@
       - com.slack.Slack
       - io.github.ungoogled_software.ungoogled_chromium
       - org.kde.haruna  # Video player
-      - org.musicbrainz.Picard  # Music metadat
+      - org.musicbrainz.Picard  # Music metadata
+      - io.github.dweymouth.supersonic  # Music player
+      - org.libreoffice.LibreOffice  # Microsoft Office Replacement
+      - org.freecad.FreeCAD  # 3D Modeling
     remote: flathub
     method: user
     state: present
